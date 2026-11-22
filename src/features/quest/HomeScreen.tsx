@@ -28,6 +28,8 @@ import {
   syncDisponible,
   tirerFoyer,
 } from './sync.ts';
+import { ActeIcon } from './icons.tsx';
+import { QrCodeInvite } from './QrCodeInvite.tsx';
 import { SyncBridge } from './SyncBridge.tsx';
 import { useQuest, type ActeBrouillon } from './store.ts';
 import type { Acte, Membre, StatutDeclaration, StreakConfig } from './types.ts';
@@ -35,12 +37,15 @@ import type { Acte, Membre, StatutDeclaration, StreakConfig } from './types.ts';
 const BROUILLON_VIDE: ActeBrouillon = {
   titre: '',
   description: '',
+  icone: null,
   portee: 'perso',
   points: 10,
   minutesDirectes: 0,
   streak: null,
   actif: true,
 };
+
+type ParentTab = 'inbox' | 'actions' | 'foyer' | 'actes';
 
 export function HomeScreen() {
   const { t } = useI18n();
@@ -120,7 +125,10 @@ function RoleGate() {
                   key={m.id}
                   variant="outline"
                   onClick={() =>
-                    choisirRole({ role: 'parent', membreId: m.id })
+                    choisirRole({
+                      role: 'parent',
+                      membreId: m.id,
+                    })
                   }
                 >
                   <Shield aria-hidden className="size-4" />
@@ -152,7 +160,11 @@ function RoleGate() {
                   <Button
                     key={m.id}
                     onClick={() =>
-                      choisirRole({ role: 'enfant', membreId: m.id })
+                      choisirRole({
+                        role: 'enfant',
+                        membreId: m.id,
+                        codeInvite: code.trim().toUpperCase(),
+                      })
                     }
                   >
                     <UserRound aria-hidden className="size-4" />
@@ -179,7 +191,11 @@ function RoleGate() {
                       );
                       return;
                     }
-                    choisirRole({ role: 'enfant', membreId: result });
+                    choisirRole({
+                      role: 'enfant',
+                      membreId: result,
+                      codeInvite: code.trim().toUpperCase(),
+                    });
                     setNouveauPrenom('');
                     toast.show(t('quest.childAdded'));
                   }}
@@ -198,7 +214,11 @@ function RoleGate() {
                   <Button
                     key={m.id}
                     onClick={() =>
-                      choisirRole({ role: 'parent', membreId: m.id })
+                      choisirRole({
+                        role: 'parent',
+                        membreId: m.id,
+                        codeInvite: code.trim().toUpperCase(),
+                      })
                     }
                   >
                     <Shield aria-hidden className="size-4" />
@@ -262,6 +282,11 @@ function ChildView() {
       (d.declarePar === membre.id || d.participants.includes(membre.id)) &&
       (filtre === 'tous' || d.statut === filtre)
   );
+  const carnet = foyer.mouvements
+    .filter(m => m.enfantId === membre.id)
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 15);
 
   const onDeclare = (acte: Acte) => {
     const parts =
@@ -324,8 +349,12 @@ function ChildView() {
                       style={{
                         margin: 0,
                         fontWeight: 'var(--font-weight-medium)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--spacing-2)',
                       }}
                     >
+                      <ActeIcon name={acte.icone} />
                       {acte.titre}
                     </p>
                     <p data-quest="supporting">
@@ -434,6 +463,31 @@ function ChildView() {
                 </li>
               );
             })}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader title={t('quest.ledger')} />
+        {carnet.length === 0 ? (
+          <EmptyState title={t('quest.ledgerEmpty')} />
+        ) : (
+          <ul data-quest="list">
+            {carnet.map(m => (
+              <li
+                key={m.id}
+                data-quest="row"
+                style={{ justifyContent: 'space-between' }}
+              >
+                <span data-quest="supporting">
+                  {t(`quest.mouvement.${m.type}`)}
+                </span>
+                <strong>
+                  {m.minutes > 0 ? '+' : ''}
+                  {t('quest.minutes', { count: m.minutes })}
+                </strong>
+              </li>
+            ))}
           </ul>
         )}
       </Card>
@@ -569,6 +623,7 @@ function ParentView() {
   const [nouvelEnfant, setNouvelEnfant] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [brouillon, setBrouillon] = useState<ActeBrouillon>(BROUILLON_VIDE);
+  const [onglet, setOnglet] = useState<ParentTab>('inbox');
 
   const soldes = enfants.map(e => ({
     id: e.id,
@@ -581,13 +636,25 @@ function ParentView() {
     setBrouillon({
       titre: a.titre,
       description: a.description,
+      icone: a.icone ?? null,
       portee: a.portee,
       points: a.points,
       minutesDirectes: a.minutesDirectes,
       streak: a.streak,
       actif: a.actif,
     });
+    setOnglet('actes');
   };
+
+  const tabs: { id: ParentTab; label: string }[] = [
+    {
+      id: 'inbox',
+      label: `${t('quest.tabInbox')}${pending.length ? ` (${pending.length})` : ''}`,
+    },
+    { id: 'actions', label: t('quest.tabActions') },
+    { id: 'foyer', label: t('quest.tabFoyer') },
+    { id: 'actes', label: t('quest.tabActs') },
+  ];
 
   return (
     <div data-quest="stack">
@@ -613,12 +680,6 @@ function ParentView() {
             </li>
           ))}
         </ul>
-        <p data-quest="supporting" style={{ marginTop: 'var(--spacing-3)' }}>
-          {t('quest.codes', {
-            enfant: foyer.codeEnfant,
-            parent: foyer.codeCoparent,
-          })}
-        </p>
         <AuthSyncCallout />
         {syncDisponible() ? (
           <div data-quest="row" style={{ marginTop: 'var(--spacing-3)' }}>
@@ -643,6 +704,9 @@ function ParentView() {
                     return;
                   }
                   const r = appliquerFoyerDistant(res);
+                  if (r === 'conflit') {
+                    useQuest.getState().setConflict(res);
+                  }
                   toast.show(
                     r === 'conflit'
                       ? t('quest.syncConflict')
@@ -657,434 +721,488 @@ function ParentView() {
         ) : null}
       </Card>
 
-      <Card>
-        <CardHeader title={t('quest.inbox')} />
-        {pending.length === 0 ? (
-          <EmptyState title={t('quest.inboxEmpty')} />
-        ) : (
-          <ul data-quest="list">
-            {pending.map(d => {
-              const acte = foyer.actes.find(a => a.id === d.acteId);
-              const qui = d.participants
-                .map(id => foyer.membres.find(m => m.id === id)?.displayName)
-                .filter(Boolean)
-                .join(', ');
-              return (
-                <li key={d.id} data-quest="acte">
-                  <p
-                    style={{
-                      margin: 0,
-                      fontWeight: 'var(--font-weight-medium)',
-                    }}
-                  >
-                    {acte?.titre}
-                  </p>
-                  <p data-quest="supporting">{qui}</p>
-                  <TextField
-                    label={t('quest.refuseReason')}
-                    value={motif[d.id] ?? ''}
-                    onChange={e =>
-                      setMotif(prev => ({ ...prev, [d.id]: e.target.value }))
-                    }
-                  />
-                  <div
-                    data-quest="row"
-                    style={{ marginTop: 'var(--spacing-2)' }}
-                  >
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        const err = valider(d.id, membre.id);
-                        toast.show(messageErreur(err, t, t('quest.validated')));
-                      }}
-                    >
-                      <Check aria-hidden className="size-4" />
-                      {t('quest.validate')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const err = refuser(d.id, membre.id, motif[d.id]);
-                        toast.show(messageErreur(err, t, t('quest.refused')));
-                      }}
-                    >
-                      <X aria-hidden className="size-4" />
-                      {t('quest.refuse')}
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader title={t('quest.manualCredit')} />
-        <div data-quest="stack">
-          <label data-quest="label">
-            {t('quest.acte')}
-            <select
-              value={creditActe}
-              onChange={e => setCreditActe(e.target.value)}
-              style={{
-                display: 'block',
-                width: '100%',
-                marginTop: 'var(--spacing-1)',
-                padding: 'var(--spacing-2)',
-                borderRadius: 'var(--radius-element)',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-background-surface)',
-              }}
-            >
-              {actes
-                .filter(a => a.actif)
-                .map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.titre}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label data-quest="label">
-            {t('quest.enfant')}
-            <select
-              value={creditEnfant}
-              onChange={e => setCreditEnfant(e.target.value)}
-              style={{
-                display: 'block',
-                width: '100%',
-                marginTop: 'var(--spacing-1)',
-                padding: 'var(--spacing-2)',
-                borderRadius: 'var(--radius-element)',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-background-surface)',
-              }}
-            >
-              {enfants.map(e => (
-                <option key={e.id} value={e.id}>
-                  {e.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
+      <div data-quest="row" role="tablist" aria-label={t('quest.parentTabs')}>
+        {tabs.map(tab => (
           <Button
-            onClick={() => {
-              const err = creditManuel(creditActe, [creditEnfant], membre.id);
-              toast.show(messageErreur(err, t, t('quest.credited')));
-            }}
-          >
-            {t('quest.credit')}
-          </Button>
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title={t('quest.consume')} />
-        <div data-quest="stack">
-          <label data-quest="label">
-            {t('quest.enfant')}
-            <select
-              value={consoEnfant}
-              onChange={e => setConsoEnfant(e.target.value)}
-              style={{
-                display: 'block',
-                width: '100%',
-                marginTop: 'var(--spacing-1)',
-                padding: 'var(--spacing-2)',
-                borderRadius: 'var(--radius-element)',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-background-surface)',
-              }}
-            >
-              {enfants.map(e => (
-                <option key={e.id} value={e.id}>
-                  {e.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <TextField
-            label={t('quest.minutesLabel')}
-            type="number"
-            value={String(consoMin)}
-            onChange={e => setConsoMin(Number(e.target.value))}
-          />
-          <Button
-            variant="outline"
-            onClick={() => {
-              const err = consommer(consoEnfant, consoMin, membre.id);
-              toast.show(messageErreur(err, t, t('quest.consumed')));
-            }}
-          >
-            {t('quest.consumeAction')}
-          </Button>
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title={t('quest.foyerSettings')} />
-        <div data-quest="stack">
-          <TextField
-            label={t('quest.foyerName')}
-            value={nomFoyer}
-            onChange={e => setNomFoyer(e.target.value)}
-          />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 'var(--spacing-2)',
-            }}
-          >
-            <TextField
-              label={t('quest.pointsTaux')}
-              type="number"
-              value={pts}
-              onChange={e => setPts(e.target.value)}
-            />
-            <TextField
-              label={t('quest.minutesTaux')}
-              type="number"
-              value={mins}
-              onChange={e => setMins(e.target.value)}
-            />
-          </div>
-          <Button
-            onClick={() => {
-              const err = majFoyer({
-                nom: nomFoyer,
-                pointsTaux: Number(pts),
-                minutesTaux: Number(mins),
-              });
-              toast.show(messageErreur(err, t, t('quest.foyerSaved')));
-            }}
-          >
-            {t('quest.saveFoyer')}
-          </Button>
-          <div data-quest="row">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const err = regenererCode('enfant');
-                toast.show(messageErreur(err, t, t('quest.codeRegen')));
-              }}
-            >
-              {t('quest.regenChildCode')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const err = regenererCode('coparent');
-                toast.show(messageErreur(err, t, t('quest.codeRegen')));
-              }}
-            >
-              {t('quest.regenParentCode')}
-            </Button>
-          </div>
-          <TextField
-            label={t('quest.addChild')}
-            value={nouvelEnfant}
-            onChange={e => setNouvelEnfant(e.target.value)}
-          />
-          <Button
+            key={tab.id}
             size="sm"
-            variant="outline"
-            onClick={() => {
-              const err = ajouterMembre('enfant', nouvelEnfant);
-              if (!err) setNouvelEnfant('');
-              toast.show(messageErreur(err, t, t('quest.childAdded')));
-            }}
+            variant={onglet === tab.id ? 'primary' : 'outline'}
+            onClick={() => setOnglet(tab.id)}
           >
-            {t('quest.addChildAction')}
+            {tab.label}
           </Button>
-          <ul data-quest="list">
-            {[...parents, ...enfants].map(m => (
+        ))}
+      </div>
+
+      {onglet === 'inbox' ? (
+        <Card>
+          <CardHeader title={t('quest.inbox')} />
+          {pending.length === 0 ? (
+            <EmptyState title={t('quest.inboxEmpty')} />
+          ) : (
+            <ul data-quest="list">
+              {pending.map(d => {
+                const acte = foyer.actes.find(a => a.id === d.acteId);
+                const qui = d.participants
+                  .map(id => foyer.membres.find(m => m.id === id)?.displayName)
+                  .filter(Boolean)
+                  .join(', ');
+                return (
+                  <li key={d.id} data-quest="acte">
+                    <p
+                      style={{
+                        margin: 0,
+                        fontWeight: 'var(--font-weight-medium)',
+                      }}
+                    >
+                      {acte?.titre}
+                    </p>
+                    <p data-quest="supporting">{qui}</p>
+                    <TextField
+                      label={t('quest.refuseReason')}
+                      value={motif[d.id] ?? ''}
+                      onChange={e =>
+                        setMotif(prev => ({ ...prev, [d.id]: e.target.value }))
+                      }
+                    />
+                    <div
+                      data-quest="row"
+                      style={{ marginTop: 'var(--spacing-2)' }}
+                    >
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const err = valider(d.id, membre.id);
+                          toast.show(
+                            messageErreur(err, t, t('quest.validated'))
+                          );
+                        }}
+                      >
+                        <Check aria-hidden className="size-4" />
+                        {t('quest.validate')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const err = refuser(d.id, membre.id, motif[d.id]);
+                          toast.show(messageErreur(err, t, t('quest.refused')));
+                        }}
+                      >
+                        <X aria-hidden className="size-4" />
+                        {t('quest.refuse')}
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      ) : null}
+
+      {onglet === 'actions' ? (
+        <>
+          <Card>
+            <CardHeader title={t('quest.manualCredit')} />
+            <div data-quest="stack">
+              <label data-quest="label">
+                {t('quest.acte')}
+                <select
+                  value={creditActe}
+                  onChange={e => setCreditActe(e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: 'var(--spacing-1)',
+                    padding: 'var(--spacing-2)',
+                    borderRadius: 'var(--radius-element)',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-background-surface)',
+                  }}
+                >
+                  {actes
+                    .filter(a => a.actif)
+                    .map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.titre}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label data-quest="label">
+                {t('quest.enfant')}
+                <select
+                  value={creditEnfant}
+                  onChange={e => setCreditEnfant(e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: 'var(--spacing-1)',
+                    padding: 'var(--spacing-2)',
+                    borderRadius: 'var(--radius-element)',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-background-surface)',
+                  }}
+                >
+                  {enfants.map(e => (
+                    <option key={e.id} value={e.id}>
+                      {e.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                onClick={() => {
+                  const err = creditManuel(
+                    creditActe,
+                    [creditEnfant],
+                    membre.id
+                  );
+                  toast.show(messageErreur(err, t, t('quest.credited')));
+                }}
+              >
+                {t('quest.credit')}
+              </Button>
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title={t('quest.consume')} />
+            <div data-quest="stack">
+              <label data-quest="label">
+                {t('quest.enfant')}
+                <select
+                  value={consoEnfant}
+                  onChange={e => setConsoEnfant(e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: 'var(--spacing-1)',
+                    padding: 'var(--spacing-2)',
+                    borderRadius: 'var(--radius-element)',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-background-surface)',
+                  }}
+                >
+                  {enfants.map(e => (
+                    <option key={e.id} value={e.id}>
+                      {e.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <TextField
+                label={t('quest.minutesLabel')}
+                type="number"
+                value={String(consoMin)}
+                onChange={e => setConsoMin(Number(e.target.value))}
+              />
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const err = consommer(consoEnfant, consoMin, membre.id);
+                  toast.show(messageErreur(err, t, t('quest.consumed')));
+                }}
+              >
+                {t('quest.consumeAction')}
+              </Button>
+            </div>
+          </Card>
+        </>
+      ) : null}
+
+      {onglet === 'foyer' ? (
+        <Card>
+          <CardHeader title={t('quest.foyerSettings')} />
+          <div data-quest="stack">
+            <p data-quest="supporting">
+              {t('quest.codes', {
+                enfant: foyer.codeEnfant,
+                parent: foyer.codeCoparent,
+              })}
+            </p>
+            <div data-quest="row">
+              <QrCodeInvite
+                code={foyer.codeEnfant}
+                label={t('quest.qrChild')}
+              />
+              <QrCodeInvite
+                code={foyer.codeCoparent}
+                label={t('quest.qrCoparent')}
+              />
+            </div>
+            <TextField
+              label={t('quest.foyerName')}
+              value={nomFoyer}
+              onChange={e => setNomFoyer(e.target.value)}
+            />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 'var(--spacing-2)',
+              }}
+            >
+              <TextField
+                label={t('quest.pointsTaux')}
+                type="number"
+                value={pts}
+                onChange={e => setPts(e.target.value)}
+              />
+              <TextField
+                label={t('quest.minutesTaux')}
+                type="number"
+                value={mins}
+                onChange={e => setMins(e.target.value)}
+              />
+            </div>
+            <Button
+              onClick={() => {
+                const err = majFoyer({
+                  nom: nomFoyer,
+                  pointsTaux: Number(pts),
+                  minutesTaux: Number(mins),
+                });
+                toast.show(messageErreur(err, t, t('quest.foyerSaved')));
+              }}
+            >
+              {t('quest.saveFoyer')}
+            </Button>
+            <div data-quest="row">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const err = regenererCode('enfant');
+                  toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                }}
+              >
+                {t('quest.regenChildCode')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const err = regenererCode('coparent');
+                  toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                }}
+              >
+                {t('quest.regenParentCode')}
+              </Button>
+            </div>
+            <TextField
+              label={t('quest.addChild')}
+              value={nouvelEnfant}
+              onChange={e => setNouvelEnfant(e.target.value)}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const err = ajouterMembre('enfant', nouvelEnfant);
+                if (!err) setNouvelEnfant('');
+                toast.show(messageErreur(err, t, t('quest.childAdded')));
+              }}
+            >
+              {t('quest.addChildAction')}
+            </Button>
+            <ul data-quest="list">
+              {[...parents, ...enfants].map(m => (
+                <li
+                  key={m.id}
+                  data-quest="row"
+                  style={{ justifyContent: 'space-between' }}
+                >
+                  <span>
+                    {m.displayName} ({m.role})
+                  </span>
+                  {m.id !== membre.id ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        const err = retirerMembre(m.id);
+                        toast.show(
+                          messageErreur(err, t, t('quest.memberRemoved'))
+                        );
+                      }}
+                    >
+                      {t('quest.deactivate')}
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Card>
+      ) : null}
+
+      {onglet === 'actes' ? (
+        <Card>
+          <CardHeader title={t('quest.actsAdmin')} />
+          <ul data-quest="list" style={{ marginBottom: 'var(--spacing-3)' }}>
+            {actes.map(a => (
               <li
-                key={m.id}
+                key={a.id}
                 data-quest="row"
                 style={{ justifyContent: 'space-between' }}
               >
-                <span>
-                  {m.displayName} ({m.role})
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 'var(--spacing-2)',
+                  }}
+                >
+                  <ActeIcon name={a.icone} />
+                  {a.titre} {a.actif ? '' : `(${t('quest.inactive')})`}
+                  {a.streak ? (
+                    <>
+                      {' '}
+                      <StreakBadge jours={0} requis={a.streak.joursRequis} />
+                    </>
+                  ) : null}
                 </span>
-                {m.id !== membre.id ? (
+                <div data-quest="row">
                   <Button
                     size="sm"
                     variant="ghost"
+                    onClick={() => chargerActe(a)}
+                  >
+                    {t('quest.editAct')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => {
-                      const err = retirerMembre(m.id);
-                      toast.show(
-                        messageErreur(err, t, t('quest.memberRemoved'))
-                      );
+                      const err = setActeActif(a.id, !a.actif);
+                      toast.show(messageErreur(err, t, t('quest.actUpdated')));
                     }}
                   >
-                    {t('quest.deactivate')}
+                    {a.actif ? t('quest.deactivate') : t('quest.activate')}
                   </Button>
-                ) : null}
+                </div>
               </li>
             ))}
           </ul>
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title={t('quest.actsAdmin')} />
-        <ul data-quest="list" style={{ marginBottom: 'var(--spacing-3)' }}>
-          {actes.map(a => (
-            <li
-              key={a.id}
-              data-quest="row"
-              style={{ justifyContent: 'space-between' }}
+          <div
+            data-quest="stack"
+            style={{
+              borderTop: '1px solid var(--color-border)',
+              paddingTop: 'var(--spacing-3)',
+            }}
+          >
+            <p data-quest="label">
+              {editId ? t('quest.editAct') : t('quest.newAct')}
+            </p>
+            <TextField
+              label={t('quest.actTitle')}
+              value={brouillon.titre}
+              onChange={e =>
+                setBrouillon(b => ({ ...b, titre: e.target.value }))
+              }
+            />
+            <TextField
+              label={t('quest.actDesc')}
+              value={brouillon.description}
+              onChange={e =>
+                setBrouillon(b => ({ ...b, description: e.target.value }))
+              }
+            />
+            <label data-quest="label">
+              {t('quest.actScope')}
+              <select
+                value={brouillon.portee}
+                onChange={e =>
+                  setBrouillon(b => ({
+                    ...b,
+                    portee: e.target.value as Acte['portee'],
+                  }))
+                }
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  marginTop: 'var(--spacing-1)',
+                  padding: 'var(--spacing-2)',
+                  borderRadius: 'var(--radius-element)',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-background-surface)',
+                }}
+              >
+                <option value="perso">{t('quest.scopePerso')}</option>
+                <option value="collectif">{t('quest.scopeCollectif')}</option>
+              </select>
+            </label>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 'var(--spacing-2)',
+              }}
             >
-              <span>
-                {a.titre} {a.actif ? '' : `(${t('quest.inactive')})`}
-                {a.streak ? (
-                  <>
-                    {' '}
-                    <StreakBadge jours={0} requis={a.streak.joursRequis} />
-                  </>
-                ) : null}
-              </span>
-              <div data-quest="row">
+              <TextField
+                label={t('quest.actPoints')}
+                type="number"
+                value={String(brouillon.points)}
+                onChange={e =>
+                  setBrouillon(b => ({
+                    ...b,
+                    points: Number(e.target.value) || 0,
+                  }))
+                }
+              />
+              <TextField
+                label={t('quest.actMinutes')}
+                type="number"
+                value={String(brouillon.minutesDirectes)}
+                onChange={e =>
+                  setBrouillon(b => ({
+                    ...b,
+                    minutesDirectes: Number(e.target.value) || 0,
+                  }))
+                }
+              />
+            </div>
+            <StreakFields
+              streak={brouillon.streak}
+              onChange={streak => setBrouillon(b => ({ ...b, streak }))}
+            />
+            <div data-quest="row">
+              <Button
+                onClick={() => {
+                  const err = upsertActe(editId, brouillon);
+                  if (!err) {
+                    setBrouillon(BROUILLON_VIDE);
+                    setEditId(null);
+                  }
+                  toast.show(
+                    messageErreur(
+                      err,
+                      t,
+                      editId ? t('quest.actUpdated') : t('quest.actCreated')
+                    )
+                  );
+                }}
+              >
+                {editId ? t('quest.saveFoyer') : t('quest.createAct')}
+              </Button>
+              {editId ? (
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => chargerActe(a)}
-                >
-                  {t('quest.editAct')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
                   onClick={() => {
-                    const err = setActeActif(a.id, !a.actif);
-                    toast.show(messageErreur(err, t, t('quest.actUpdated')));
+                    setEditId(null);
+                    setBrouillon(BROUILLON_VIDE);
                   }}
                 >
-                  {a.actif ? t('quest.deactivate') : t('quest.activate')}
+                  {t('quest.switch')}
                 </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <div
-          data-quest="stack"
-          style={{
-            borderTop: '1px solid var(--color-border)',
-            paddingTop: 'var(--spacing-3)',
-          }}
-        >
-          <p data-quest="label">
-            {editId ? t('quest.editAct') : t('quest.newAct')}
-          </p>
-          <TextField
-            label={t('quest.actTitle')}
-            value={brouillon.titre}
-            onChange={e => setBrouillon(b => ({ ...b, titre: e.target.value }))}
-          />
-          <TextField
-            label={t('quest.actDesc')}
-            value={brouillon.description}
-            onChange={e =>
-              setBrouillon(b => ({ ...b, description: e.target.value }))
-            }
-          />
-          <label data-quest="label">
-            {t('quest.actScope')}
-            <select
-              value={brouillon.portee}
-              onChange={e =>
-                setBrouillon(b => ({
-                  ...b,
-                  portee: e.target.value as Acte['portee'],
-                }))
-              }
-              style={{
-                display: 'block',
-                width: '100%',
-                marginTop: 'var(--spacing-1)',
-                padding: 'var(--spacing-2)',
-                borderRadius: 'var(--radius-element)',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-background-surface)',
-              }}
-            >
-              <option value="perso">{t('quest.scopePerso')}</option>
-              <option value="collectif">{t('quest.scopeCollectif')}</option>
-            </select>
-          </label>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 'var(--spacing-2)',
-            }}
-          >
-            <TextField
-              label={t('quest.actPoints')}
-              type="number"
-              value={String(brouillon.points)}
-              onChange={e =>
-                setBrouillon(b => ({
-                  ...b,
-                  points: Number(e.target.value) || 0,
-                }))
-              }
-            />
-            <TextField
-              label={t('quest.actMinutes')}
-              type="number"
-              value={String(brouillon.minutesDirectes)}
-              onChange={e =>
-                setBrouillon(b => ({
-                  ...b,
-                  minutesDirectes: Number(e.target.value) || 0,
-                }))
-              }
-            />
+              ) : null}
+            </div>
           </div>
-          <StreakFields
-            streak={brouillon.streak}
-            onChange={streak => setBrouillon(b => ({ ...b, streak }))}
-          />
-          <div data-quest="row">
-            <Button
-              onClick={() => {
-                const err = upsertActe(editId, brouillon);
-                if (!err) {
-                  setBrouillon(BROUILLON_VIDE);
-                  setEditId(null);
-                }
-                toast.show(
-                  messageErreur(
-                    err,
-                    t,
-                    editId ? t('quest.actUpdated') : t('quest.actCreated')
-                  )
-                );
-              }}
-            >
-              {editId ? t('quest.saveFoyer') : t('quest.createAct')}
-            </Button>
-            {editId ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setEditId(null);
-                  setBrouillon(BROUILLON_VIDE);
-                }}
-              >
-                {t('quest.switch')}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </Card>
+        </Card>
+      ) : null}
     </div>
   );
 }

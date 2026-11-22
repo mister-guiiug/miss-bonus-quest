@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createId } from '@mister-guiiug/dev-pwa-config/id';
+import { generateCode } from '@mister-guiiug/dev-pwa-config/pairing';
 import {
   avancerStreak,
   jourParis,
@@ -27,17 +28,13 @@ import { streakKey } from './types.ts';
 const SESSION_KEY = 'miss-bonus-quest_session';
 
 function nouveauCode(longueur = 6): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let out = '';
-  for (let i = 0; i < longueur; i++) {
-    out += alphabet[Math.floor(Math.random() * alphabet.length)]!;
-  }
-  return out;
+  return generateCode(longueur, { alphabet: 'antiConfusion' });
 }
 
 export type ActeBrouillon = {
   titre: string;
   description: string;
+  icone?: string | null;
   portee: PorteeActe;
   points: number;
   minutesDirectes: number;
@@ -64,9 +61,15 @@ interface QuestState {
   foyer: Foyer;
   session: SessionLocale | null;
   ready: boolean;
+  /** Foyer distant en conflit — à trancher dans l’UI. */
+  conflict: Foyer | null;
   load: () => void;
   choisirRole: (session: SessionLocale) => void;
   quitterSession: () => void;
+  /** Lie le compte Supabase au parent courant / propriétaire du foyer. */
+  lierCompteParent: (authUserId: string, membreId?: string) => void;
+  setConflict: (foyer: Foyer | null) => void;
+  resoudreConflit: (choix: 'local' | 'cloud') => void;
   declarer: (acteId: string, participants: string[]) => string | null;
   valider: (declarationId: string, parentId: string) => string | null;
   refuser: (
@@ -135,6 +138,7 @@ export const useQuest = create<QuestState>((set, get) => ({
   foyer: foyerStore.load(),
   session: null,
   ready: false,
+  conflict: null,
 
   load() {
     set({
@@ -152,6 +156,34 @@ export const useQuest = create<QuestState>((set, get) => ({
   quitterSession() {
     ecrireSession(null);
     set({ session: null });
+  },
+
+  lierCompteParent(authUserId, membreId) {
+    const { foyer, session } = get();
+    const cible = membreId ?? session?.membreId;
+    const next: Foyer = {
+      ...foyer,
+      ownerAuthId: foyer.ownerAuthId ?? authUserId,
+      membres: foyer.membres.map(m =>
+        m.id === cible && m.role === 'parent' ? { ...m, authUserId } : m
+      ),
+    };
+    set({ foyer: sauver(next) });
+  },
+
+  setConflict(foyer) {
+    set({ conflict: foyer });
+  },
+
+  resoudreConflit(choix) {
+    const { conflict, foyer } = get();
+    if (!conflict) return;
+    if (choix === 'cloud') {
+      foyerStore.save(conflict);
+      set({ foyer: conflict, conflict: null });
+      return;
+    }
+    set({ conflict: null, foyer: sauver(foyer) });
   },
 
   declarer(acteId, participants) {
@@ -489,6 +521,7 @@ export const useQuest = create<QuestState>((set, get) => ({
               ...a,
               titre,
               description: brouillon.description.trim(),
+              icone: brouillon.icone ?? a.icone ?? null,
               portee: brouillon.portee,
               points: brouillon.points,
               minutesDirectes: brouillon.minutesDirectes,
@@ -506,6 +539,7 @@ export const useQuest = create<QuestState>((set, get) => ({
           id: createId('acte'),
           titre,
           description: brouillon.description.trim(),
+          icone: brouillon.icone ?? null,
           portee: brouillon.portee,
           points: brouillon.points,
           minutesDirectes: brouillon.minutesDirectes,

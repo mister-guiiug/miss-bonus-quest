@@ -15,6 +15,7 @@ import { AppUpdates } from '@mister-guiiug/dev-pwa-config/react/app-updates';
 import { registerSW } from 'virtual:pwa-register';
 import { useI18n } from './i18n/index.ts';
 import { HomeScreen } from './features/quest/HomeScreen.tsx';
+import { useQuest } from './features/quest/store.ts';
 import { SettingsScreen } from './features/settings/SettingsScreen.tsx';
 import { AboutScreen } from './features/about/AboutScreen.tsx';
 import { AccountScreen } from './features/account/AccountScreen.tsx';
@@ -47,6 +48,9 @@ import { AccountScreen } from './features/account/AccountScreen.tsx';
 export function Shell() {
   const { t } = useI18n();
   const { pathname } = useLocation();
+  const pending = useQuest(
+    s => s.foyer.declarations.filter(d => d.statut === 'en_attente').length
+  );
 
   /*
    * UNE VUE DE PAGE PAR NAVIGATION — ni zéro, ni deux. PostHog en envoie une
@@ -68,6 +72,12 @@ export function Shell() {
       label: t('nav.home'),
       icon: <Home aria-hidden="true" />,
       end: true,
+      ...(pending > 0
+        ? {
+            badge: pending,
+            badgeLabel: t('quest.tabInbox'),
+          }
+        : {}),
     },
     {
       href: '/reglages',

@@ -170,6 +170,41 @@ describe('useQuest MVP3', () => {
     expect(state.creerEnfantApresCode('  ')).toBe('nom-requis');
   });
 
+  it('lie le compte parent et résout un conflit', () => {
+    const state = useQuest.getState();
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+    state.lierCompteParent('auth-uid-1');
+    expect(useQuest.getState().foyer.ownerAuthId).toBe('auth-uid-1');
+    expect(
+      useQuest.getState().foyer.membres.find(m => m.id === parent.id)!
+        .authUserId
+    ).toBe('auth-uid-1');
+
+    const local = useQuest.getState().foyer;
+    const cloud = {
+      ...local,
+      nom: 'Cloud',
+      updatedAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    expect(useQuest.getState().appliquerFoyerDistant(cloud)).toBe('ok');
+    expect(useQuest.getState().foyer.nom).toBe('Cloud');
+
+    useQuest.getState().majFoyer({ nom: 'Plus récent local' });
+    const olderCloud = {
+      ...useQuest.getState().foyer,
+      nom: 'Ancien',
+      updatedAt: new Date(0).toISOString(),
+    };
+    expect(useQuest.getState().appliquerFoyerDistant(olderCloud)).toBe(
+      'conflit'
+    );
+    useQuest.getState().setConflict(olderCloud);
+    useQuest.getState().resoudreConflit('cloud');
+    expect(useQuest.getState().foyer.nom).toBe('Ancien');
+    expect(useQuest.getState().conflict).toBeNull();
+  });
+
   it('édite la série d’un acte', () => {
     const state = useQuest.getState();
     const parent = state.foyer.membres.find(m => m.role === 'parent')!;

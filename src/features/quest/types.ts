@@ -17,6 +17,8 @@ export interface Acte {
   id: string;
   titre: string;
   description: string;
+  /** Clé lucide locale (`bed`, `table`…) — optionnelle. */
+  icone?: string | null;
   portee: PorteeActe;
   points: number;
   minutesDirectes: number;
@@ -30,6 +32,8 @@ export interface Membre {
   role: Role;
   displayName: string;
   actif: boolean;
+  /** Lien Supabase Auth quand le parent s’est connecté (ADR 0016). */
+  authUserId?: string | null;
 }
 
 export interface Declaration {
@@ -78,11 +82,15 @@ export interface Foyer {
   streaks: Record<string, StreakProgress>;
   /** Horodatage ISO de la dernière mutation locale — sert au conflit sync. */
   updatedAt: string;
+  /** `auth.uid()` du parent propriétaire (ADR 0016). */
+  ownerAuthId?: string | null;
 }
 
 export interface SessionLocale {
   role: Role;
   membreId: string;
+  /** Code saisi pour poll enfant / co-parent (ADR 0016). */
+  codeInvite?: string;
 }
 
 export function streakKey(enfantId: string, acteId: string): string {
