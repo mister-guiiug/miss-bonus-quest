@@ -2,29 +2,12 @@
  * Les dictionnaires de l'application, une entrée par locale et TOUTES DE MÊME
  * FORME : `createI18n` dérive le type des clés du dictionnaire de repli, et le
  * compilateur refuse ensuite `t('cle.qui.nexiste.pas')`.
- *
- * Deux locales seulement ici. En ajouter une se fait en copiant `fr` et en
- * traduisant : la forme, elle, est vérifiée à la compilation.
- *
- * CE FICHIER NE CONTIENT PAS LES LIBELLÉS DES COMPOSANTS DU SOCLE (« Fermer »,
- * « Réessayer », « Retour »…). Ils vivent dans le socle (`react/labels-fr`,
- * `react/labels-en`…), et `I18nProvider` pose `LabelsProvider` avec la locale
- * courante tout seul — dans les langues passées à `labels` (`./index.ts`).
- * Les redéclarer ici, c'est le travail que sept apps ont fait dans huit
- * fichiers-pont d'environ quatre cents lignes, avant que le socle ne porte les
- * traductions.
- */
-/**
- * PAS DE `as const` ICI, et c'est délibéré. Il figerait chaque chaîne
- * française comme son PROPRE type littéral, et le dictionnaire anglais devrait
- * alors contenir… les mêmes mots français. La forme est ce qui doit
- * correspondre, pas le contenu.
  */
 const fr = {
   app: {
     name: 'Miss Bonus Quest',
     tagline:
-      "Les enfants declarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d'ecran gagnees.",
+      'Les enfants déclarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d’écran gagnées.',
   },
   nav: {
     home: 'Accueil',
@@ -32,70 +15,88 @@ const fr = {
     account: 'Compte',
     about: 'À propos',
   },
-  home: {
-    title: 'Notes',
-    loading: 'Chargement des notes',
-    empty: 'Aucune note pour le moment.',
-    emptyHint: 'La première note montrera la persistance versionnée.',
-    add: 'Ajouter',
-    field: 'Nouvelle note',
-    placeholder: 'Ce que je ne veux pas oublier',
-    remove: 'Supprimer',
-    removed: 'Note supprimée',
-    undo: 'Annuler',
-    count: {
-      one: '{count} note',
-      other: '{count} notes',
+  quest: {
+    loading: 'Chargement du foyer…',
+    whoTitle: 'Qui joue ?',
+    whoHint:
+      'MVP 1 : profils locaux sur cet appareil (Supabase arrive ensuite).',
+    parents: 'Parents',
+    enfants: 'Enfants',
+    mvpLocal: 'Code enfant (rappel) : {code}',
+    hello: 'Bonjour {name}',
+    switch: 'Changer',
+    balance: 'Temps d’écran gagné',
+    minutes: '{count} min',
+    catalogue: 'Actes',
+    declare: 'J’ai fait',
+    reward: '+{min} min',
+    streakProgress: 'série {jours}/{requis}',
+    declared: 'Déclaration envoyée — en attente de validation.',
+    history: 'Historique',
+    historyEmpty: 'Aucune déclaration pour l’instant.',
+    status: {
+      en_attente: 'En attente',
+      validee: 'Validée',
+      refusee: 'Refusée',
     },
-    sync: {
-      refused: {
-        one: '{count} écriture refusée par la base : {error}',
-        other: '{count} écritures refusées par la base : {error}',
-      },
-      retry: 'Réessayer',
-    },
-    stale:
-      'Réseau indisponible : voici la copie enregistrée {when}. Les notes ont pu changer depuis.',
+    parentBoard: 'Tableau de bord',
+    taux: 'Taux : {pts} pts → {min} min',
+    codes: 'Codes foyer — enfant : {enfant} · co-parent : {parent}',
+    inbox: 'À valider',
+    inboxEmpty: 'Rien en attente.',
+    validate: 'Valider',
+    refuse: 'Refuser',
+    validated: 'Acte validé, minutes créditées.',
+    refused: 'Déclaration refusée.',
+    manualCredit: 'Crédit manuel',
+    acte: 'Acte',
+    enfant: 'Enfant',
+    credit: 'Créditer',
+    credited: 'Minutes ajoutées.',
+    consume: 'Marquer un usage d’écran',
+    minutesLabel: 'Minutes',
+    consumeAction: 'Consommer',
+    consumed: 'Minutes déduites du solde.',
   },
   settings: {
     title: 'Réglages',
     appearance: 'Apparence',
     language: 'Langue',
-    data: 'Données',
-    export: 'Exporter mes notes',
-    import: 'Importer mes notes',
-    importConfirm: 'Remplacer les notes actuelles ?',
+    data: 'Données du foyer',
+    export: 'Exporter le foyer',
+    import: 'Importer un foyer',
+    importConfirm: 'Remplacer le foyer actuel ?',
     importBody:
       'Le fichier remplacera tout ce qui est sur cet appareil. Exportez d’abord si vous voulez garder l’état actuel.',
     imported: {
-      one: '{count} note importée.',
-      other: '{count} notes importées.',
+      one: '{count} enfant dans le foyer importé.',
+      other: '{count} enfants dans le foyer importé.',
     },
     importFailed: 'Fichier refusé : {error}',
-    reset: 'Tout effacer',
-    resetConfirm: 'Effacer toutes les notes ?',
-    resetBody: 'Cette action est définitive.',
+    reset: 'Réinitialiser le foyer',
+    resetConfirm: 'Effacer le foyer et repartir du catalogue ?',
+    resetBody: 'Cette action est définitive sur cet appareil.',
     backend: 'Source de données',
-    backendLocal: 'Cet appareil seulement',
+    backendLocal: 'Cet appareil seulement (MVP 1)',
   },
   account: {
     title: 'Compte',
     localMode: 'Mode local',
     localModeBody:
-      "Aucun backend n'est configuré : tout reste sur cet appareil. L'écran est là quand même — un écran masqué par une condition finit par diverger de celui qui s'affiche.",
+      'Aucun backend n’est configuré : le foyer reste sur cet appareil. La sync parent/enfant via Supabase arrive après la MVP 1.',
     signOut: 'Se déconnecter',
     admin: 'Administration',
     linkIntro:
       'Un lien à usage unique arrive dans votre boîte : aucun mot de passe à retenir, ni à voler.',
     linkSentTitle: 'Lien envoyé',
     linkSentBody:
-      "Un lien vient d'être envoyé à {email}. Ouvrez-le depuis cet appareil : il vous ramènera ici, connecté·e. Il n'est valable qu'une fois.",
+      'Un lien vient d’être envoyé à {email}. Ouvrez-le depuis cet appareil : il vous ramènera ici, connecté·e. Il n’est valable qu’une fois.',
     linkAgain: 'Recevoir un autre lien',
     usePassword: 'Se connecter avec un mot de passe',
     useLink: 'Recevoir un lien plutôt',
     danger: {
       title: 'Zone dangereuse',
-      body: 'Supprimer votre compte efface vos notes, votre profil et le compte lui-même. Rien n’est conservé, et cette action ne s’annule pas.',
+      body: 'Supprimer votre compte efface vos données distantes, votre profil et le compte lui-même. Rien n’est conservé, et cette action ne s’annule pas.',
       action: 'Supprimer mon compte',
       confirmLabel: 'Retapez votre adresse pour confirmer',
       confirmHint: 'L’adresse du compte est {email}.',
@@ -105,19 +106,18 @@ const fr = {
       failed: 'La suppression a échoué : {error}',
     },
   },
-
   about: {
     title: 'À propos',
-    what: "Les enfants declarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d'ecran gagnees.",
+    what: 'Les enfants déclarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d’écran gagnées.',
   },
 };
 
 const en: typeof fr = {
   app: {
     name: 'Miss Bonus Quest',
-    // TODO traduire : create-lg-pwa-app a recopié ici la description française.
+    // TODO traduire
     tagline:
-      "Les enfants declarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d'ecran gagnees.",
+      'Les enfants déclarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d’écran gagnées.',
   },
   nav: {
     home: 'Home',
@@ -125,57 +125,74 @@ const en: typeof fr = {
     account: 'Account',
     about: 'About',
   },
-  home: {
-    title: 'Notes',
-    loading: 'Loading notes',
-    empty: 'No notes yet.',
-    emptyHint: 'The first note will show versioned persistence at work.',
-    add: 'Add',
-    field: 'New note',
-    placeholder: "What I don't want to forget",
-    remove: 'Delete',
-    removed: 'Note deleted',
-    undo: 'Undo',
-    count: {
-      one: '{count} note',
-      other: '{count} notes',
+  quest: {
+    loading: 'Loading household…',
+    whoTitle: 'Who is playing?',
+    whoHint: 'MVP 1: local profiles on this device (Supabase comes next).',
+    parents: 'Parents',
+    enfants: 'Kids',
+    mvpLocal: 'Kid code (reminder): {code}',
+    hello: 'Hi {name}',
+    switch: 'Switch',
+    balance: 'Earned screen time',
+    minutes: '{count} min',
+    catalogue: 'Quests',
+    declare: 'I did it',
+    reward: '+{min} min',
+    streakProgress: 'streak {jours}/{requis}',
+    declared: 'Submitted — waiting for approval.',
+    history: 'History',
+    historyEmpty: 'No declarations yet.',
+    status: {
+      en_attente: 'Pending',
+      validee: 'Approved',
+      refusee: 'Declined',
     },
-    sync: {
-      refused: {
-        one: '{count} write refused by the database: {error}',
-        other: '{count} writes refused by the database: {error}',
-      },
-      retry: 'Retry',
-    },
-    stale:
-      'Network unavailable: this is the copy saved {when}. Notes may have changed since.',
+    parentBoard: 'Dashboard',
+    taux: 'Rate: {pts} pts → {min} min',
+    codes: 'Household codes — kid: {enfant} · co-parent: {parent}',
+    inbox: 'To approve',
+    inboxEmpty: 'Nothing pending.',
+    validate: 'Approve',
+    refuse: 'Decline',
+    validated: 'Approved, minutes credited.',
+    refused: 'Declaration declined.',
+    manualCredit: 'Manual credit',
+    acte: 'Quest',
+    enfant: 'Child',
+    credit: 'Credit',
+    credited: 'Minutes added.',
+    consume: 'Log screen use',
+    minutesLabel: 'Minutes',
+    consumeAction: 'Consume',
+    consumed: 'Minutes deducted.',
   },
   settings: {
     title: 'Settings',
     appearance: 'Appearance',
     language: 'Language',
-    data: 'Data',
-    export: 'Export my notes',
-    import: 'Import my notes',
-    importConfirm: 'Replace the current notes?',
+    data: 'Household data',
+    export: 'Export household',
+    import: 'Import household',
+    importConfirm: 'Replace the current household?',
     importBody:
       'The file will replace everything on this device. Export first if you want to keep the current state.',
     imported: {
-      one: '{count} note imported.',
-      other: '{count} notes imported.',
+      one: '{count} child in the imported household.',
+      other: '{count} children in the imported household.',
     },
     importFailed: 'File rejected: {error}',
-    reset: 'Erase everything',
-    resetConfirm: 'Erase all notes?',
-    resetBody: 'This cannot be undone.',
+    reset: 'Reset household',
+    resetConfirm: 'Erase the household and restart from the catalogue?',
+    resetBody: 'This cannot be undone on this device.',
     backend: 'Data source',
-    backendLocal: 'This device only',
+    backendLocal: 'This device only (MVP 1)',
   },
   account: {
     title: 'Account',
     localMode: 'Local mode',
     localModeBody:
-      'No backend is configured: everything stays on this device. The screen is still here — a screen hidden behind a condition drifts away from the one that shows.',
+      'No backend is configured: the household stays on this device. Parent/child sync via Supabase comes after MVP 1.',
     signOut: 'Sign out',
     admin: 'Admin',
     linkIntro:
@@ -188,7 +205,7 @@ const en: typeof fr = {
     useLink: 'Send me a link instead',
     danger: {
       title: 'Danger zone',
-      body: 'Deleting your account erases your notes, your profile and the account itself. Nothing is kept, and this cannot be undone.',
+      body: 'Deleting your account erases your remote data, your profile and the account itself. Nothing is kept, and this cannot be undone.',
       action: 'Delete my account',
       confirmLabel: 'Type your address again to confirm',
       confirmHint: 'The account address is {email}.',
@@ -198,11 +215,10 @@ const en: typeof fr = {
       failed: 'Deletion failed: {error}',
     },
   },
-
   about: {
     title: 'About',
-    // TODO traduire : create-lg-pwa-app a recopié ici la description française.
-    what: "Les enfants declarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d'ecran gagnees.",
+    // TODO traduire
+    what: 'Les enfants déclarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d’écran gagnées.',
   },
 };
 

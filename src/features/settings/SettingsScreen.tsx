@@ -8,72 +8,55 @@ import { SegmentedControl } from '@mister-guiiug/dev-pwa-config/react/segmented-
 import { ChromePrefs } from '@mister-guiiug/dev-pwa-config/react/chrome-prefs';
 import { dateSlug, downloadText } from '@mister-guiiug/dev-pwa-config/download';
 import { useI18n } from '../../i18n/index.ts';
-import { backend, coverage } from '../../backend/index.ts';
-import { useNotes } from '../home/store.ts';
+import { coverage } from '../../backend/index.ts';
+import { useQuest } from '../quest/store.ts';
 import { configReport } from '../../app/config/env.ts';
 
 /**
- * L'écran de réglages : le seul écran que TOUTES les apps de la famille ont, et
- * dont la COMPOSITION reste métier — c'est pourquoi le socle livre les briques
- * (`ChromePrefs`, `AppVersion`, `FamilyApps`, `ConfirmDialog`, `downloadText`)
- * et non l'écran. Onze apps en ont un, de 142 à 728 lignes.
- *
- * Ce qu'il montre ici et qui manque partout ailleurs : **le diagnostic de
- * configuration**. Une app déjà en ligne doit pouvoir dire ce qui lui manque et
- * sur quoi elle est retombée, au lieu de laisser croire qu'un compte distant
- * fonctionne alors que tout est resté sur l'appareil.
- *
- * IMPORTER, PAS SEULEMENT EXPORTER. Quinze apps du parc savent exporter ;
- * presque aucune ne sait relire son propre fichier à l'écran — et c'est le
- * seul moyen de changer d'appareil sans compte. Le fichier passe par le port
- * (`versioned-store.import()` en local), donc par le schéma : un fichier
- * d'une autre app ou tronqué est refusé sans rien effacer. Quand des notes
- * existent, l'import demande confirmation, parce qu'il REMPLACE.
+ * Réglages famille : apparence, diagnostic de config, export/import/reset du
+ * foyer Miss Bonus Quest (magasin versionné local en MVP 1).
  */
 export function SettingsScreen() {
   const { t, m, fmt, locale, setLocale, locales } = useI18n();
-  const clear = useNotes(state => state.clear);
-  const importJson = useNotes(state => state.importJson);
-  const notes = useNotes(state => state.notes);
-  const ready = useNotes(state => state.ready);
-  const load = useNotes(state => state.load);
-  const error = useNotes(state => state.error);
+  const reset = useQuest(state => state.reset);
+  const importJson = useQuest(state => state.importJson);
+  const exportJson = useQuest(state => state.exportJson);
+  const foyer = useQuest(state => state.foyer);
+  const ready = useQuest(state => state.ready);
+  const load = useQuest(state => state.load);
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Ouvert directement (lien profond, rechargement), cet écran ne sait pas si
-  // des notes existent tant que le port n'a pas été lu : sans cette lecture,
-  // l'import remplacerait sans demander. La première version le faisait.
   useEffect(() => {
-    if (!ready) void load();
+    if (!ready) load();
   }, [ready, load]);
   const fileInput = useRef<HTMLInputElement>(null);
-  /** Le fichier lu, en attente de confirmation parce que des notes existent. */
   const [pending, setPending] = useState<string | null>(null);
   const [imported, setImported] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
 
-  const exportNotes = async () => {
-    const json = await backend.notes.export();
+  const hasData = foyer.declarations.length > 0 || foyer.mouvements.length > 0;
+
+  const exportFoyer = () => {
+    const json = exportJson();
     if (json)
-      downloadText(json, `notes-${dateSlug()}.json`, 'application/json');
+      downloadText(json, `foyer-${dateSlug()}.json`, 'application/json');
   };
 
-  const runImport = async (json: string) => {
-    const count = await importJson(json);
+  const runImport = (json: string) => {
+    const count = importJson(json);
     setImported(count);
     setFailed(count === null);
+    setError(count === null ? 'schema' : null);
   };
 
   const onFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    // Remis à zéro tout de suite : choisir DEUX fois le même fichier doit
-    // relancer l'import, et un `<input type=file>` ne signale pas un choix
-    // identique au précédent.
     event.target.value = '';
     if (!file) return;
     const json = await file.text();
-    if (notes.length > 0) setPending(json);
-    else await runImport(json);
+    if (hasData) setPending(json);
+    else runImport(json);
   };
 
   return (
@@ -113,7 +96,7 @@ export function SettingsScreen() {
       <Card>
         <CardHeader title={t('settings.data')} />
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void exportNotes()}>
+          <Button variant="outline" onClick={exportFoyer}>
             {t('settings.export')}
           </Button>
           <Button variant="outline" onClick={() => fileInput.current?.click()}>
@@ -172,7 +155,7 @@ export function SettingsScreen() {
         title={t('settings.resetConfirm')}
         message={t('settings.resetBody')}
         onConfirm={() => {
-          void clear();
+          reset();
           setConfirming(false);
         }}
         onCancel={() => setConfirming(false)}
@@ -185,7 +168,7 @@ export function SettingsScreen() {
         onConfirm={() => {
           const json = pending;
           setPending(null);
-          if (json !== null) void runImport(json);
+          if (json !== null) runImport(json);
         }}
         onCancel={() => setPending(null)}
       />

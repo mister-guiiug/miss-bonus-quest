@@ -138,7 +138,7 @@ export default defineConfig(({ command }) => {
           name: 'Miss Bonus Quest',
           shortName: 'Miss Bonus Quest',
           description:
-            "Les enfants declarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d'ecran gagnees.",
+            'Les enfants déclarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d’écran gagnées.',
         })
       ),
 

@@ -14,7 +14,7 @@ import { usePageViews } from '@mister-guiiug/dev-pwa-config/react/use-page-views
 import { AppUpdates } from '@mister-guiiug/dev-pwa-config/react/app-updates';
 import { registerSW } from 'virtual:pwa-register';
 import { useI18n } from './i18n/index.ts';
-import { HomeScreen } from './features/home/HomeScreen.tsx';
+import { HomeScreen } from './features/quest/HomeScreen.tsx';
 import { SettingsScreen } from './features/settings/SettingsScreen.tsx';
 import { AboutScreen } from './features/about/AboutScreen.tsx';
 import { AccountScreen } from './features/account/AccountScreen.tsx';
