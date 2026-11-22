@@ -39,7 +39,7 @@ export function HomeScreen() {
       {session?.role === 'enfant' ? <ChildView /> : null}
       {session?.role === 'parent' ? <ParentView /> : null}
 
-      <AppFooter repoUrl={REPO_URL} />
+      <AppFooter repoUrl={REPO_URL} issues />
     </div>
   );
 }
