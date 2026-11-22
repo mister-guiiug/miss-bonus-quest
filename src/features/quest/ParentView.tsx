@@ -219,7 +219,7 @@ export function ParentView() {
             min: foyer.minutesTaux,
           })}
         />
-        <ul data-quest="list">
+        <ul data-quest="soldes">
           {soldes.map(s => (
             <li
               key={s.id}
@@ -241,7 +241,7 @@ export function ParentView() {
           <p data-quest="supporting">
             {t('quest.weekRange', { debut: synthese.debut, fin: synthese.fin })}
           </p>
-          <ul data-quest="list">
+          <ul data-quest="week-list">
             {synthese.parEnfant.map(e => (
               <li key={e.enfantId} data-quest="supporting">
                 {e.displayName} · +{e.minutesGagnees} / −{e.minutesConsommees}{' '}

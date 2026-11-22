@@ -26,11 +26,15 @@ export function HomeScreen() {
   const ready = useQuest(s => s.ready);
   const session = useQuest(s => s.session);
 
-  useIdlePrefetch(loadChildView);
-  useIdlePrefetch(loadParentView);
+  // Précharge tout de suite : un `setOffline` avant le premier clic (e2e)
+  // laisserait sinon le lazy() bloqué hors ligne.
+  useIdlePrefetch(loadChildView, { timeout: 0 });
+  useIdlePrefetch(loadParentView, { timeout: 0 });
 
   useEffect(() => {
     load();
+    void loadChildView();
+    void loadParentView();
   }, [load]);
 
   if (!ready) {

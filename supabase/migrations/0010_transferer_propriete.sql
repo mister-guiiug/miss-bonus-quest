@@ -55,4 +55,7 @@ end;
 $$;
 
 revoke all on function foyer_transferer_propriete(text, uuid) from public;
+-- revoke from public ne retire pas EXECUTE à anon (privilège par défaut
+-- Supabase) — même garde que 0009 pour foyer_rejoindre_coparent.
+revoke all on function foyer_transferer_propriete(text, uuid) from anon;
 grant execute on function foyer_transferer_propriete(text, uuid) to authenticated;
