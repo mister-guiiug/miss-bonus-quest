@@ -76,6 +76,8 @@ export interface Foyer {
   declarations: Declaration[];
   mouvements: MouvementSolde[];
   streaks: Record<string, StreakProgress>;
+  /** Horodatage ISO de la dernière mutation locale — sert au conflit sync. */
+  updatedAt: string;
 }
 
 export interface SessionLocale {

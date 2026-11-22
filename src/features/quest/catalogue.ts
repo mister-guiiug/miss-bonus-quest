@@ -101,5 +101,6 @@ export function foyerSeed(nom = 'Notre foyer'): Foyer {
     declarations: [],
     mouvements: [],
     streaks: {},
+    updatedAt: new Date().toISOString(),
   };
 }

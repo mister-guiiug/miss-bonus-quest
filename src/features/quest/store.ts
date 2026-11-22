@@ -104,14 +104,31 @@ interface QuestState {
     brouillon: ActeBrouillon
   ) => string | null;
   setActeActif: (acteId: string, actif: boolean) => string | null;
-  appliquerFoyerDistant: (foyer: Foyer) => void;
+  /**
+   * Après code enfant : crée un profil sans session parent.
+   * Renvoie l’id créé, ou un code d’erreur.
+   */
+  creerEnfantApresCode: (displayName: string) => string;
+  /**
+   * Applique un foyer distant. `force` écrase même si le local est plus récent.
+   * Renvoie `conflit` si le local a un `updatedAt` plus récent.
+   */
+  appliquerFoyerDistant: (
+    foyer: Foyer,
+    opts?: { force?: boolean }
+  ) => 'ok' | 'conflit';
   exportJson: () => string | null;
   importJson: (json: string) => number | null;
   reset: () => void;
 }
 
 function sauver(foyer: Foyer) {
-  foyerStore.save(foyer);
+  const stamped: Foyer = {
+    ...foyer,
+    updatedAt: new Date().toISOString(),
+  };
+  foyerStore.save(stamped);
+  return stamped;
 }
 
 export const useQuest = create<QuestState>((set, get) => ({
@@ -174,8 +191,7 @@ export const useQuest = create<QuestState>((set, get) => ({
       ...foyer,
       declarations: [declaration, ...foyer.declarations],
     };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -256,8 +272,7 @@ export const useQuest = create<QuestState>((set, get) => ({
           : d
       ),
     };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -286,8 +301,7 @@ export const useQuest = create<QuestState>((set, get) => ({
           : d
       ),
     };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -340,8 +354,7 @@ export const useQuest = create<QuestState>((set, get) => ({
       declarations: [declaration, ...foyer.declarations],
       mouvements,
     };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -377,8 +390,7 @@ export const useQuest = create<QuestState>((set, get) => ({
       ...foyer,
       mouvements: [mouvement, ...foyer.mouvements],
     };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -405,8 +417,7 @@ export const useQuest = create<QuestState>((set, get) => ({
     };
     if (next.pointsTaux <= 0) return 'taux-invalide';
     if (next.minutesTaux < 0) return 'taux-invalide';
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -418,8 +429,7 @@ export const useQuest = create<QuestState>((set, get) => ({
       codeEnfant: quel === 'enfant' ? nouveauCode() : foyer.codeEnfant,
       codeCoparent: quel === 'coparent' ? nouveauCode() : foyer.codeCoparent,
     };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -435,8 +445,7 @@ export const useQuest = create<QuestState>((set, get) => ({
       actif: true,
     };
     const next: Foyer = { ...foyer, membres: [...foyer.membres, membre] };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -458,8 +467,7 @@ export const useQuest = create<QuestState>((set, get) => ({
         m.id === membreId ? { ...m, actif: false } : m
       ),
     };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -508,8 +516,7 @@ export const useQuest = create<QuestState>((set, get) => ({
       ];
     }
     const next: Foyer = { ...foyer, actes };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
@@ -521,14 +528,39 @@ export const useQuest = create<QuestState>((set, get) => ({
       ...foyer,
       actes: foyer.actes.map(a => (a.id === acteId ? { ...a, actif } : a)),
     };
-    sauver(next);
-    set({ foyer: next });
+    set({ foyer: sauver(next) });
     return null;
   },
 
-  appliquerFoyerDistant(foyer) {
-    sauver(foyer);
-    set({ foyer });
+  creerEnfantApresCode(displayName) {
+    const nom = displayName.trim();
+    if (!nom) return 'nom-requis';
+    const { foyer } = get();
+    const membre: Membre = {
+      id: createId('membre'),
+      role: 'enfant',
+      displayName: nom,
+      actif: true,
+    };
+    const next: Foyer = { ...foyer, membres: [...foyer.membres, membre] };
+    set({ foyer: sauver(next) });
+    return membre.id;
+  },
+
+  appliquerFoyerDistant(foyer, opts) {
+    const local = get().foyer;
+    const distantAt = foyer.updatedAt ?? new Date(0).toISOString();
+    const localAt = local.updatedAt ?? new Date(0).toISOString();
+    if (!opts?.force && localAt > distantAt && local.id === foyer.id) {
+      return 'conflit';
+    }
+    const normalized: Foyer = {
+      ...foyer,
+      updatedAt: foyer.updatedAt ?? distantAt,
+    };
+    foyerStore.save(normalized);
+    set({ foyer: normalized });
+    return 'ok';
   },
 
   exportJson() {
@@ -538,7 +570,7 @@ export const useQuest = create<QuestState>((set, get) => ({
   importJson(json) {
     try {
       const foyer = importFoyer(json);
-      set({ foyer });
+      set({ foyer: sauver(foyer) });
       return foyer.membres.filter(m => m.role === 'enfant').length;
     } catch {
       return null;

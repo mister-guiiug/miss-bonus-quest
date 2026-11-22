@@ -71,6 +71,7 @@ export const foyerSchema = z.object({
   declarations: z.array(declarationSchema),
   mouvements: z.array(mouvementSchema),
   streaks: z.record(z.string(), streakProgressSchema),
+  updatedAt: z.string().min(1).optional(),
 });
 
 export const sessionSchema = z.object({

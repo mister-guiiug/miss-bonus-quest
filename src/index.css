@@ -14,6 +14,14 @@
  * l'emporte de plein droit, sans `!important`.
  */
 @import '@mister-guiiug/dev-pwa-config/components.css';
+/*
+ * Grammaire Astryx (ADR 0015) : noms et échelles. `astryx-fluid` aligne
+ * le texte des composants du socle sur les crans (14/16 px), décision
+ * d'app — sans elle les `--text-fluid-*` continueraient de glisser.
+ */
+@import '@mister-guiiug/dev-pwa-config/astryx.css';
+@import '@mister-guiiug/dev-pwa-config/astryx-fluid.css';
+@import './features/quest/quest.css';
 
 /*
  * LA PALETTE PEINT LES JETONS DU SOCLE, elle ne vit pas à côté d'eux.
@@ -78,13 +86,16 @@
 
 body {
   margin: 0;
-  background: var(--dwc-bg);
-  color: var(--dwc-text);
+  background: var(--color-background-body, var(--dwc-bg));
+  color: var(--color-text-primary, var(--dwc-text));
   font-family:
     system-ui,
     -apple-system,
     'Segoe UI',
     sans-serif;
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  line-height: var(--text-body-leading);
 }
 
 /*
