@@ -8,8 +8,8 @@ describe('deep-link', () => {
   });
 
   it('construit une URL d’invitation', () => {
-    expect(urlInvitation('bonus', 'https://ex.test', '/miss-bonus-quest/')).toBe(
-      'https://ex.test/miss-bonus-quest/?code=BONUS'
-    );
+    expect(
+      urlInvitation('bonus', 'https://ex.test', '/miss-bonus-quest/')
+    ).toBe('https://ex.test/miss-bonus-quest/?code=BONUS');
   });
 });

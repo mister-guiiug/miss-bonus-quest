@@ -10,7 +10,10 @@ export function SessionBar({ membre }: { membre: Membre }) {
   const quitterSession = useQuest(s => s.quitterSession);
   return (
     <div data-quest="session">
-      <p data-quest="label" style={{ margin: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
+      <p
+        data-quest="label"
+        style={{ margin: 0, display: 'flex', gap: 8, alignItems: 'center' }}
+      >
         <AvatarInitiales name={membre.displayName} />
         {t('quest.hello', { name: membre.displayName })}
       </p>

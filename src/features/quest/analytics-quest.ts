@@ -1,7 +1,4 @@
-import {
-  GESTES,
-  trackEvent,
-} from '@mister-guiiug/dev-pwa-config/analytics';
+import { GESTES, trackEvent } from '@mister-guiiug/dev-pwa-config/analytics';
 
 /** Événements métier — noms stables, jamais d’identifiant personnel. */
 export function trackQuest(
