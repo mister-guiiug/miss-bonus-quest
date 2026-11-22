@@ -75,6 +75,12 @@ test.describe('@critical le cadre', () => {
       .click();
     await expect(soldeLea.getByText('12 min', { exact: true })).toBeVisible();
 
+    // ADR 0018 : le port n’écrit qu’à l’expiration du sursis — attendre
+    // la figée avant reload, sinon le solde reviendrait à 0.
+    await expect(page.getByText('Validation enregistrée.')).toBeVisible({
+      timeout: 12_000,
+    });
+
     // Session locale (sessionStorage) : le profil Parent reste après reload.
     await page.reload();
     await expect(page.getByText('Bonjour Parent')).toBeVisible();
