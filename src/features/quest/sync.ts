@@ -14,6 +14,7 @@ import {
 } from '@mister-guiiug/dev-pwa-config/realtime/supabase';
 import { coverage } from '../../backend/index.ts';
 import { supabase } from '../../backend/supabase.ts';
+import { hashCode } from './codes.ts';
 import { foyerSchema } from './schema.ts';
 import type { Foyer } from './types.ts';
 
@@ -51,12 +52,15 @@ type Client = {
   removeChannel: (channel: unknown) => unknown;
 };
 
-/**
- * Sync foyer par instantané JSON (ADR 0014 / 0015).
- * Sans projet Supabase configuré : indisponible, le magasin local reste la source.
- */
 export function syncDisponible(): boolean {
   return coverage.kind === 'supabase' && supabase.missing().length === 0;
+}
+
+function normaliserFoyer(parsed: ReturnType<typeof foyerSchema.parse>): Foyer {
+  return {
+    ...parsed,
+    updatedAt: parsed.updatedAt ?? new Date(0).toISOString(),
+  };
 }
 
 export async function pousserFoyer(foyer: Foyer): Promise<string | null> {
@@ -69,12 +73,16 @@ export async function pousserFoyer(foyer: Foyer): Promise<string | null> {
     if (!user) return 'sync-indisponible';
 
     const updatedAt = foyer.updatedAt ?? new Date().toISOString();
+    const [codeEnfant, codeCoparent] = await Promise.all([
+      hashCode(foyer.codeEnfant),
+      hashCode(foyer.codeCoparent),
+    ]);
     const { error } = await client.from('foyer_snapshots').upsert(
       {
         id: foyer.id,
-        owner_id: user.id,
-        code_enfant: foyer.codeEnfant.toUpperCase(),
-        code_coparent: foyer.codeCoparent.toUpperCase(),
+        owner_id: foyer.ownerAuthId ?? user.id,
+        code_enfant: codeEnfant,
+        code_coparent: codeCoparent,
         payload: foyer,
         updated_at: updatedAt,
       },
@@ -118,10 +126,12 @@ export async function rejoindreParCode(code: string): Promise<Foyer | string> {
     const { data, error } = await client.rpc('foyer_par_code', {
       p_code: code.trim().toUpperCase(),
     });
-    if (error || !data) {
+    if (error) {
+      if (error.message?.includes('rate-limit')) return 'sync-rate-limit';
       log.error('rejoindre par code', { cause: error });
       return 'code-invalide';
     }
+    if (!data) return 'code-invalide';
     return normaliserFoyer(foyerSchema.parse(data));
   } catch (cause) {
     log.error('rejoindre par code', { cause });
@@ -129,14 +139,48 @@ export async function rejoindreParCode(code: string): Promise<Foyer | string> {
   }
 }
 
-function normaliserFoyer(parsed: ReturnType<typeof foyerSchema.parse>): Foyer {
-  return {
-    ...parsed,
-    updatedAt: parsed.updatedAt ?? new Date(0).toISOString(),
-  };
+/** Transfert de propriétaire (RPC) — l’appelant doit être owner_id. */
+export async function transfererPropriete(
+  foyerId: string,
+  nouveauAuthId: string
+): Promise<string | null> {
+  if (!syncDisponible()) return 'sync-indisponible';
+  try {
+    const client = (await supabase.getClient()) as unknown as Client;
+    const { error } = await client.rpc('foyer_transferer_propriete', {
+      p_id: foyerId,
+      p_nouveau: nouveauAuthId,
+    });
+    if (error) {
+      log.error('transferer propriete', { cause: error });
+      return 'sync-echec';
+    }
+    return null;
+  } catch (cause) {
+    log.error('transferer propriete', { cause });
+    return 'sync-echec';
+  }
 }
 
-/** File hors-ligne : un upsert foyer par id (ADR 0015). */
+/** Co-parent connecté : s’ajoute à co_owner_ids et reçoit le payload. */
+export async function rejoindreCoparent(code: string): Promise<Foyer | string> {
+  if (!syncDisponible()) return 'sync-indisponible';
+  try {
+    const client = (await supabase.getClient()) as unknown as Client;
+    const { data, error } = await client.rpc('foyer_rejoindre_coparent', {
+      p_code: code.trim().toUpperCase(),
+    });
+    if (error || !data) {
+      log.error('rejoindre coparent', { cause: error });
+      return 'code-invalide';
+    }
+    return normaliserFoyer(foyerSchema.parse(data));
+  } catch (cause) {
+    log.error('rejoindre coparent', { cause });
+    return 'sync-echec';
+  }
+}
+
 let pushQueue: SyncQueue<Foyer> | null = null;
 
 export function foyerPushQueue(): SyncQueue<Foyer> {
@@ -158,7 +202,6 @@ export function foyerPushQueue(): SyncQueue<Foyer> {
   return pushQueue;
 }
 
-/** Enfile un push ; drain si en ligne. */
 export function enfilerPush(foyer: Foyer): void {
   if (!syncDisponible()) return;
   const q = foyerPushQueue();
@@ -168,10 +211,6 @@ export function enfilerPush(foyer: Foyer): void {
   }
 }
 
-/**
- * Abonnement Realtime sur `foyer_snapshots` pour un foyer.
- * Sans session auth, RLS ne laisse rien passer — réservé au parent connecté.
- */
 export async function ecouterFoyer(
   foyerId: string,
   onPayload: (foyer: Foyer) => void

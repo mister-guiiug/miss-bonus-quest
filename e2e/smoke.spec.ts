@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { deverrouillerEnfant } from './foyer.ts';
+import { deverrouillerEnfant, passerPorte } from './foyer.ts';
 
 /**
  * Le SMOKE : ce qui doit marcher pour qu'une livraison ait un sens.
@@ -17,11 +17,12 @@ test.describe('@critical le cadre', () => {
   test("l'accueil s'ouvre et porte le nom de l'app", async ({ page }) => {
     await page.goto('/');
     // Le nom de l'app, pas celui de l'écran : c'est le seul `h1` que lit un
-    // moteur. Le sélecteur de profil (Qui joue ?) est le premier vrai contenu
-    // React du foyer — ancré ici pour ne pas passer sur une app morte.
+    // moteur. La porte créer/rejoindre précède « Qui joue ? » (ADR 0017).
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(
       'Miss Bonus Quest'
     );
+    await expect(page.getByText('Ton foyer')).toBeVisible();
+    await passerPorte(page);
     await expect(page.getByText('Qui joue ?')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Parent' })).toBeVisible();
     await expect(page.getByLabel('Code foyer')).toBeVisible();
@@ -53,35 +54,61 @@ test.describe('@critical le cadre', () => {
       .filter({ hasText: 'Ranger sa chambre' });
     await pending.getByRole('button', { name: 'Valider' }).click();
     await expect(page.getByText('Rien en attente.')).toBeVisible();
-    const soldeLea = page.getByRole('listitem').filter({ hasText: 'Léa' });
-    await expect(soldeLea.getByText('12 min')).toBeVisible();
+    // Soldes du tableau — pas la synthèse semaine (même prénom, « 0 min »).
+    const soldeLea = page
+      .locator('[data-quest="soldes"]')
+      .getByRole('listitem')
+      .filter({ hasText: 'Léa' });
+    await expect(soldeLea.getByText('12 min', { exact: true })).toBeVisible();
+
+    // Sursis 8 s : Annuler restaure l’état d’avant la validation (ADR 0017).
+    await page.getByRole('button', { name: 'Annuler' }).click();
+    await expect(soldeLea.getByText('0 min', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('listitem').filter({ hasText: 'Ranger sa chambre' })
+    ).toBeVisible();
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Ranger sa chambre' })
+      .getByRole('button', { name: 'Valider' })
+      .click();
+    await expect(soldeLea.getByText('12 min', { exact: true })).toBeVisible();
 
     // Session locale (sessionStorage) : le profil Parent reste après reload.
     await page.reload();
     await expect(page.getByText('Bonjour Parent')).toBeVisible();
     await expect(
-      page.getByRole('listitem').filter({ hasText: 'Léa' }).getByText('12 min')
+      page
+        .locator('[data-quest="soldes"]')
+        .getByRole('listitem')
+        .filter({ hasText: 'Léa' })
+        .getByText('12 min', { exact: true })
     ).toBeVisible();
   });
 
   test('crédit manuel et consommation sans solde négatif', async ({ page }) => {
     await page.goto('/');
+    await passerPorte(page);
     await page.getByRole('button', { name: 'Parent' }).click();
+    await page.getByRole('button', { name: 'Actions' }).click();
 
-    const soldeLea = page.getByRole('listitem').filter({ hasText: 'Léa' });
+    const soldeLea = page
+      .locator('[data-quest="soldes"]')
+      .getByRole('listitem')
+      .filter({ hasText: 'Léa' });
 
     await page.getByRole('button', { name: 'Créditer' }).click();
     // « Faire son lit » : 10 pts → 5 min (taux 10→5), pas de minutes directes.
-    await expect(soldeLea.getByText('5 min')).toBeVisible();
+    await expect(soldeLea.getByText('5 min', { exact: true })).toBeVisible();
 
     await page.getByLabel('Minutes', { exact: true }).fill('3');
     await page.getByRole('button', { name: 'Consommer' }).click();
-    await expect(soldeLea.getByText('2 min')).toBeVisible();
+    await expect(soldeLea.getByText('2 min', { exact: true })).toBeVisible();
 
     // Consommer plus que le solde : le magasin borne à zéro.
     await page.getByLabel('Minutes', { exact: true }).fill('99');
     await page.getByRole('button', { name: 'Consommer' }).click();
-    await expect(soldeLea.getByText('0 min')).toBeVisible();
+    await expect(soldeLea.getByText('0 min', { exact: true })).toBeVisible();
   });
 
   test('hors ligne, une déclaration n’est pas perdue au retour du réseau', async ({
@@ -90,10 +117,12 @@ test.describe('@critical le cadre', () => {
   }) => {
     await page.goto('/');
     await expect(page.locator('[data-dwc="sync-status"]')).toHaveCount(0);
+    // Morceaux lazy enfant/parent déjà en cache avant la coupure.
+    await deverrouillerEnfant(page, { enfant: 'Léa' });
+    await expect(page.getByText('Bonjour Léa')).toBeVisible();
 
     await context.setOffline(true);
 
-    await deverrouillerEnfant(page, { enfant: 'Léa' });
     const acte = page
       .getByRole('listitem')
       .filter({ hasText: 'Faire son lit' });
@@ -109,6 +138,15 @@ test.describe('@critical le cadre', () => {
     await expect(page.getByText('Bonjour Léa')).toBeVisible();
     await expect(page.getByText('Faire son lit').first()).toBeVisible();
     await expect(page.getByText('En attente').first()).toBeVisible();
+  });
+
+  test('le deep link ?code= saute la porte et préremplit', async ({ page }) => {
+    await page.goto('/?code=bonus');
+    await expect(page.getByText('Qui joue ?')).toBeVisible();
+    await expect(page.getByLabel('Code foyer')).toHaveValue('BONUS');
+    await expect(
+      page.getByRole('button', { name: 'Créer mon foyer' })
+    ).toHaveCount(0);
   });
 
   test('la navigation atteint les quatre destinations', async ({ page }) => {

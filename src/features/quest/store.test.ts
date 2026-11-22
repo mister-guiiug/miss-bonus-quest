@@ -170,6 +170,41 @@ describe('useQuest MVP3', () => {
     expect(state.creerEnfantApresCode('  ')).toBe('nom-requis');
   });
 
+  it('lie le compte parent et résout un conflit', () => {
+    const state = useQuest.getState();
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+    state.lierCompteParent('auth-uid-1');
+    expect(useQuest.getState().foyer.ownerAuthId).toBe('auth-uid-1');
+    expect(
+      useQuest.getState().foyer.membres.find(m => m.id === parent.id)!
+        .authUserId
+    ).toBe('auth-uid-1');
+
+    const local = useQuest.getState().foyer;
+    const cloud = {
+      ...local,
+      nom: 'Cloud',
+      updatedAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    expect(useQuest.getState().appliquerFoyerDistant(cloud)).toBe('ok');
+    expect(useQuest.getState().foyer.nom).toBe('Cloud');
+
+    useQuest.getState().majFoyer({ nom: 'Plus récent local' });
+    const olderCloud = {
+      ...useQuest.getState().foyer,
+      nom: 'Ancien',
+      updatedAt: new Date(0).toISOString(),
+    };
+    expect(useQuest.getState().appliquerFoyerDistant(olderCloud)).toBe(
+      'conflit'
+    );
+    useQuest.getState().setConflict(olderCloud);
+    useQuest.getState().resoudreConflit('cloud');
+    expect(useQuest.getState().foyer.nom).toBe('Ancien');
+    expect(useQuest.getState().conflict).toBeNull();
+  });
+
   it('édite la série d’un acte', () => {
     const state = useQuest.getState();
     const parent = state.foyer.membres.find(m => m.role === 'parent')!;
@@ -194,5 +229,45 @@ describe('useQuest MVP3', () => {
       bonusPoints: 15,
       bonusMinutes: 3,
     });
+  });
+});
+
+describe('useQuest MVP5', () => {
+  it('annule une validation pendant le sursis', () => {
+    const state = useQuest.getState();
+    const enfant = state.foyer.membres.find(m => m.role === 'enfant')!;
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    const acte = state.foyer.actes.find(a => a.titre === 'Ranger sa chambre')!;
+
+    state.choisirRole({ role: 'enfant', membreId: enfant.id });
+    expect(state.declarer(acte.id, [])).toBeNull();
+    const decl = useQuest.getState().foyer.declarations[0]!;
+
+    useQuest.getState().choisirRole({ role: 'parent', membreId: parent.id });
+    expect(useQuest.getState().valider(decl.id, parent.id)).toBeNull();
+    expect(useQuest.getState().solde(enfant.id)).toBe(12);
+    expect(useQuest.getState().pendingUndo).not.toBeNull();
+
+    useQuest.getState().annulerDerniereValidation();
+    expect(useQuest.getState().solde(enfant.id)).toBe(0);
+    expect(useQuest.getState().foyer.declarations[0]!.statut).toBe(
+      'en_attente'
+    );
+    expect(useQuest.getState().pendingUndo).toBeNull();
+  });
+
+  it('transfère le propriétaire vers un parent lié', () => {
+    const state = useQuest.getState();
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+    state.lierCompteParent('auth-a', parent.id);
+    expect(state.ajouterMembre('parent', 'Autre')).toBeNull();
+    const autre = useQuest
+      .getState()
+      .foyer.membres.find(m => m.displayName === 'Autre')!;
+    useQuest.getState().lierCompteParent('auth-b', autre.id);
+
+    expect(useQuest.getState().transfererOwner(autre.id)).toBeNull();
+    expect(useQuest.getState().foyer.ownerAuthId).toBe('auth-b');
   });
 });

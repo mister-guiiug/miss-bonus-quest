@@ -10,6 +10,7 @@ const acteSchema = z.object({
   id: z.string().min(1),
   titre: z.string().min(1),
   description: z.string(),
+  icone: z.string().min(1).nullable().optional(),
   portee: z.enum(['perso', 'collectif']),
   points: z.number().int().nonnegative(),
   minutesDirectes: z.number().int().nonnegative(),
@@ -23,6 +24,7 @@ const membreSchema = z.object({
   role: z.enum(['parent', 'enfant']),
   displayName: z.string().min(1),
   actif: z.boolean(),
+  authUserId: z.string().min(1).nullable().optional(),
 });
 
 const declarationSchema = z.object({
@@ -72,11 +74,13 @@ export const foyerSchema = z.object({
   mouvements: z.array(mouvementSchema),
   streaks: z.record(z.string(), streakProgressSchema),
   updatedAt: z.string().min(1).optional(),
+  ownerAuthId: z.string().min(1).nullable().optional(),
 });
 
 export const sessionSchema = z.object({
   role: z.enum(['parent', 'enfant']),
   membreId: z.string().min(1),
+  codeInvite: z.string().min(1).optional(),
 });
 
 export type FoyerData = z.infer<typeof foyerSchema>;

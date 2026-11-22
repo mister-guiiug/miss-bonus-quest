@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createId } from '@mister-guiiug/dev-pwa-config/id';
+import { generateCode } from '@mister-guiiug/dev-pwa-config/pairing';
 import {
   avancerStreak,
   jourParis,
@@ -25,19 +26,19 @@ import type {
 import { streakKey } from './types.ts';
 
 const SESSION_KEY = 'miss-bonus-quest_session';
+/** Sursis d’annulation après validation — ADR 0008 / 0017. */
+export const UNDO_MS = 8_000;
+
+let undoTimer: ReturnType<typeof setTimeout> | null = null;
 
 function nouveauCode(longueur = 6): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let out = '';
-  for (let i = 0; i < longueur; i++) {
-    out += alphabet[Math.floor(Math.random() * alphabet.length)]!;
-  }
-  return out;
+  return generateCode(longueur, { alphabet: 'antiConfusion' });
 }
 
 export type ActeBrouillon = {
   titre: string;
   description: string;
+  icone?: string | null;
   portee: PorteeActe;
   points: number;
   minutesDirectes: number;
@@ -64,11 +65,25 @@ interface QuestState {
   foyer: Foyer;
   session: SessionLocale | null;
   ready: boolean;
+  /** Foyer distant en conflit — à trancher dans l’UI. */
+  conflict: Foyer | null;
+  /** Snapshot avant la dernière validation — annulable pendant UNDO_MS. */
+  pendingUndo: Foyer | null;
   load: () => void;
   choisirRole: (session: SessionLocale) => void;
   quitterSession: () => void;
+  /** Lie le compte Supabase au parent courant / propriétaire du foyer. */
+  lierCompteParent: (authUserId: string, membreId?: string) => void;
+  setConflict: (foyer: Foyer | null) => void;
+  resoudreConflit: (choix: 'local' | 'cloud') => void;
   declarer: (acteId: string, participants: string[]) => string | null;
   valider: (declarationId: string, parentId: string) => string | null;
+  /** Restaure le foyer d’avant la dernière validation (sursis). */
+  annulerDerniereValidation: () => void;
+  /** Solde le sursis sans restaurer — quitter l’écran / nouvelle mutation. */
+  soldUndo: () => void;
+  /** Transfert local de propriétaire vers un parent lié à un compte. */
+  transfererOwner: (nouveauMembreId: string) => string | null;
   refuser: (
     declarationId: string,
     parentId: string,
@@ -135,6 +150,8 @@ export const useQuest = create<QuestState>((set, get) => ({
   foyer: foyerStore.load(),
   session: null,
   ready: false,
+  conflict: null,
+  pendingUndo: null,
 
   load() {
     set({
@@ -145,13 +162,43 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   choisirRole(session) {
+    get().soldUndo();
     ecrireSession(session);
     set({ session });
   },
 
   quitterSession() {
+    get().soldUndo();
     ecrireSession(null);
     set({ session: null });
+  },
+
+  lierCompteParent(authUserId, membreId) {
+    const { foyer, session } = get();
+    const cible = membreId ?? session?.membreId;
+    const next: Foyer = {
+      ...foyer,
+      ownerAuthId: foyer.ownerAuthId ?? authUserId,
+      membres: foyer.membres.map(m =>
+        m.id === cible && m.role === 'parent' ? { ...m, authUserId } : m
+      ),
+    };
+    set({ foyer: sauver(next) });
+  },
+
+  setConflict(foyer) {
+    set({ conflict: foyer });
+  },
+
+  resoudreConflit(choix) {
+    const { conflict, foyer } = get();
+    if (!conflict) return;
+    if (choix === 'cloud') {
+      foyerStore.save(conflict);
+      set({ foyer: conflict, conflict: null });
+      return;
+    }
+    set({ conflict: null, foyer: sauver(foyer) });
   },
 
   declarer(acteId, participants) {
@@ -208,6 +255,9 @@ export const useQuest = create<QuestState>((set, get) => ({
 
     const acte = foyer.actes.find(a => a.id === decl.acteId);
     if (!acte) return 'acte-inconnu';
+
+    get().soldUndo();
+    const avant: Foyer = structuredClone(foyer);
 
     const now = new Date().toISOString();
     const jour = jourParis(now);
@@ -272,6 +322,57 @@ export const useQuest = create<QuestState>((set, get) => ({
           : d
       ),
     };
+    set({ foyer: sauver(next), pendingUndo: avant });
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => {
+      undoTimer = null;
+      set({ pendingUndo: null });
+    }, UNDO_MS);
+    return null;
+  },
+
+  annulerDerniereValidation() {
+    const { pendingUndo } = get();
+    if (!pendingUndo) return;
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      undoTimer = null;
+    }
+    foyerStore.save(pendingUndo);
+    set({ foyer: pendingUndo, pendingUndo: null });
+  },
+
+  soldUndo() {
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      undoTimer = null;
+    }
+    set({ pendingUndo: null });
+  },
+
+  transfererOwner(nouveauMembreId) {
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    const actuel = foyer.membres.find(m => m.id === session.membreId);
+    if (!actuel || actuel.role !== 'parent') return 'parent-inconnu';
+    if (
+      foyer.ownerAuthId &&
+      actuel.authUserId &&
+      foyer.ownerAuthId !== actuel.authUserId
+    ) {
+      return 'pas-proprietaire';
+    }
+    const cible = foyer.membres.find(
+      m => m.id === nouveauMembreId && m.role === 'parent' && m.actif
+    );
+    if (!cible) return 'membre-inconnu';
+    if (!cible.authUserId) return 'owner-sans-auth';
+    if (cible.id === actuel.id) return 'soi-interdit';
+    const next: Foyer = {
+      ...foyer,
+      ownerAuthId: cible.authUserId,
+    };
+    get().soldUndo();
     set({ foyer: sauver(next) });
     return null;
   },
@@ -489,6 +590,7 @@ export const useQuest = create<QuestState>((set, get) => ({
               ...a,
               titre,
               description: brouillon.description.trim(),
+              icone: brouillon.icone ?? a.icone ?? null,
               portee: brouillon.portee,
               points: brouillon.points,
               minutesDirectes: brouillon.minutesDirectes,
@@ -506,6 +608,7 @@ export const useQuest = create<QuestState>((set, get) => ({
           id: createId('acte'),
           titre,
           description: brouillon.description.trim(),
+          icone: brouillon.icone ?? null,
           portee: brouillon.portee,
           points: brouillon.points,
           minutesDirectes: brouillon.minutesDirectes,
@@ -578,8 +681,17 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   reset() {
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      undoTimer = null;
+    }
     clearFoyer();
     ecrireSession(null);
-    set({ foyer: foyerStore.load(), session: null });
+    set({
+      foyer: foyerStore.load(),
+      session: null,
+      pendingUndo: null,
+      conflict: null,
+    });
   },
 }));

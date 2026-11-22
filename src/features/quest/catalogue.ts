@@ -7,6 +7,7 @@ export function catalogueInitial(): Acte[] {
     {
       titre: 'Faire son lit',
       description: 'Lit rangé le matin.',
+      icone: 'bed',
       portee: 'perso',
       points: 10,
       minutesDirectes: 0,
@@ -17,16 +18,18 @@ export function catalogueInitial(): Acte[] {
     {
       titre: 'Ranger sa chambre',
       description: 'Sol et bureau dégagés.',
+      icone: 'sparkles',
       portee: 'perso',
       points: 15,
       minutesDirectes: 5,
-      streak: null,
+      streak: { joursRequis: 7, bonusPoints: 20, bonusMinutes: 10 },
       actif: true,
       ordre: 2,
     },
     {
       titre: 'Mettre la table',
       description: 'Couverts et verres pour tout le monde.',
+      icone: 'table',
       portee: 'collectif',
       points: 8,
       minutesDirectes: 5,
@@ -37,6 +40,7 @@ export function catalogueInitial(): Acte[] {
     {
       titre: 'Débarrasser la table',
       description: 'Assiettes et restes rangés.',
+      icone: 'trash',
       portee: 'collectif',
       points: 8,
       minutesDirectes: 5,
@@ -47,6 +51,7 @@ export function catalogueInitial(): Acte[] {
     {
       titre: 'Faire la vaisselle',
       description: 'Laver ou remplir le lave-vaisselle.',
+      icone: 'dish',
       portee: 'collectif',
       points: 12,
       minutesDirectes: 10,
@@ -57,6 +62,7 @@ export function catalogueInitial(): Acte[] {
     {
       titre: 'Passer le balai',
       description: 'Sols principaux balayés.',
+      icone: 'brush',
       portee: 'collectif',
       points: 10,
       minutesDirectes: 5,
