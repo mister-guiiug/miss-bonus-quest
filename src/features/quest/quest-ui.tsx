@@ -1,4 +1,4 @@
-import { Button } from '@mister-guiiug/dev-pwa-config/react/button';
+﻿import { Button } from '@mister-guiiug/dev-pwa-config/react/button';
 import { Star } from 'lucide-react';
 import { useI18n } from '../../i18n/index.ts';
 import { AvatarInitiales } from './AvatarInitiales.tsx';
@@ -8,14 +8,18 @@ import type { Membre } from './types.ts';
 export function SessionBar({ membre }: { membre: Membre }) {
   const { t } = useI18n();
   const quitterSession = useQuest(s => s.quitterSession);
+  const lectureSeule = useQuest(s => s.session?.lectureSeule);
   return (
     <div data-quest="session">
       <p
         data-quest="label"
         style={{ margin: 0, display: 'flex', gap: 8, alignItems: 'center' }}
       >
-        <AvatarInitiales name={membre.displayName} />
+        <AvatarInitiales membre={membre} />
         {t('quest.hello', { name: membre.displayName })}
+        {lectureSeule ? (
+          <span data-quest="supporting">({t('quest.lectureBadge')})</span>
+        ) : null}
       </p>
       <Button variant="ghost" size="sm" onClick={quitterSession}>
         {t('quest.switch')}

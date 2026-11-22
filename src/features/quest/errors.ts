@@ -23,6 +23,9 @@ const ERROR_KEYS: Record<string, string> = {
   'sync-rate-limit': 'quest.errors.syncRateLimit',
   'pas-proprietaire': 'quest.errors.pasProprietaire',
   'owner-sans-auth': 'quest.errors.ownerSansAuth',
+  'lecture-seule': 'quest.errors.lectureSeule',
+  'plafond-jour': 'quest.errors.plafondJour',
+  'pin-invalide': 'quest.errors.pinInvalide',
 };
 
 /**

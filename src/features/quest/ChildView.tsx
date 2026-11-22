@@ -14,6 +14,7 @@ import { useQuest } from './store.ts';
 import type { Acte, StatutDeclaration } from './types.ts';
 import { hapticLight } from './haptics.ts';
 import { trackQuest } from './analytics-quest.ts';
+import { playQuestSound } from './sound.ts';
 
 export function ChildView() {
   const { t } = useI18n();
@@ -52,6 +53,7 @@ export function ChildView() {
     const err = declarer(acte.id, parts);
     if (!err) {
       hapticLight();
+      playQuestSound('soft');
       trackQuest('declarer', { portee: acte.portee });
     }
     toast.show(messageErreur(err, t, t('quest.declared')));

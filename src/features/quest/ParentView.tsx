@@ -26,6 +26,10 @@ import { AvatarInitiales } from './AvatarInitiales.tsx';
 import { hapticLight, hapticSuccess } from './haptics.ts';
 import { trackQuest } from './analytics-quest.ts';
 import { UNDO_MS } from './store.ts';
+import { partagerInvitation } from './invite-share.ts';
+import { telechargerSynthese, texteSyntheseSemaine } from './week-export.ts';
+import { playQuestSound } from './sound.ts';
+import { setSonActive, sonActive } from './prefs.ts';
 
 const BROUILLON_VIDE: ActeBrouillon = {
   titre: '',
@@ -38,7 +42,9 @@ const BROUILLON_VIDE: ActeBrouillon = {
   actif: true,
 };
 
-type ParentTab = 'inbox' | 'actions' | 'foyer' | 'actes';
+type ParentTab = 'inbox' | 'actions' | 'foyer' | 'actes' | 'history';
+const AVATAR_COLORS = ['#c4ddd8', '#f0d9b5', '#d4c4e8', '#f5c6c6', '#c9d4f0'];
+const AVATAR_EMOJIS = ['🦊', '🐼', '🦁', '🐸', '🦄', '🐯'];
 
 function AuthSyncCallout() {
   const { t } = useI18n();
@@ -152,6 +158,9 @@ export function ParentView() {
   const upsertActe = useQuest(s => s.upsertActe);
   const setActeActif = useQuest(s => s.setActeActif);
   const appliquerFoyerDistant = useQuest(s => s.appliquerFoyerDistant);
+  const definirPin = useQuest(s => s.definirPin);
+  const majAvatar = useQuest(s => s.majAvatar);
+  const lectureSeule = session.lectureSeule === true;
   const membre = foyer.membres.find(m => m.id === session.membreId)!;
   const enfants = foyer.membres.filter(m => m.role === 'enfant' && m.actif);
   const parents = foyer.membres.filter(m => m.role === 'parent' && m.actif);
@@ -171,16 +180,28 @@ export function ParentView() {
   const [editId, setEditId] = useState<string | null>(null);
   const [brouillon, setBrouillon] = useState<ActeBrouillon>(BROUILLON_VIDE);
   const [onglet, setOnglet] = useState<ParentTab>('inbox');
+  const [plafond, setPlafond] = useState(String(foyer.plafondMinutesJour ?? 0));
+  const [pinDraft, setPinDraft] = useState<Record<string, string>>({});
+  const [histFiltre, setHistFiltre] = useState<
+    'tous' | 'validee' | 'refusee' | 'en_attente'
+  >('tous');
+  const [soundOn, setSoundOn] = useState(() => sonActive());
 
   const soldes = enfants.map(e => ({
     id: e.id,
     name: e.displayName,
     minutes: soldeMinutes(foyer, e.id),
+    membre: e,
   }));
   const synthese = useMemo(() => synthetiserSemaine(foyer), [foyer]);
   const coParents = parents.filter(
     p => p.id !== membre.id && p.authUserId && p.actif
   );
+  const historique = foyer.declarations
+    .filter(d => histFiltre === 'tous' || d.statut === histFiltre)
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 40);
 
   const chargerActe = (a: Acte) => {
     setEditId(a.id);
@@ -203,6 +224,7 @@ export function ParentView() {
       label: `${t('quest.tabInbox')}${pending.length ? ` (${pending.length})` : ''}`,
     },
     { id: 'actions', label: t('quest.tabActions') },
+    { id: 'history', label: t('quest.tabHistory') },
     { id: 'foyer', label: t('quest.tabFoyer') },
     { id: 'actes', label: t('quest.tabActs') },
   ];
@@ -229,7 +251,7 @@ export function ParentView() {
               <span
                 style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}
               >
-                <AvatarInitiales name={s.name} size={24} />
+                <AvatarInitiales membre={s.membre} size={24} />
                 {s.name}
               </span>
               <strong>{t('quest.minutes', { count: s.minutes })}</strong>
@@ -249,6 +271,19 @@ export function ParentView() {
               </li>
             ))}
           </ul>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              telechargerSynthese(
+                texteSyntheseSemaine(synthese, foyer.nom),
+                `semaine-${synthese.debut}.txt`
+              );
+              toast.show(t('quest.weekExported'));
+            }}
+          >
+            {t('quest.weekExport')}
+          </Button>
         </div>
         <AuthSyncCallout />
         {syncDisponible() ? (
@@ -304,7 +339,54 @@ export function ParentView() {
         ))}
       </div>
 
-      {onglet === 'inbox' ? (
+      {onglet === 'history' ? (
+        <Card>
+          <CardHeader title={t('quest.tabHistory')} />
+          <div data-quest="row" style={{ marginBottom: 'var(--spacing-3)' }}>
+            {(
+              [
+                ['tous', t('quest.filterAll')],
+                ['en_attente', t('quest.status.en_attente')],
+                ['validee', t('quest.status.validee')],
+                ['refusee', t('quest.status.refusee')],
+              ] as const
+            ).map(([key, label]) => (
+              <Button
+                key={key}
+                size="sm"
+                variant={histFiltre === key ? 'primary' : 'outline'}
+                onClick={() => setHistFiltre(key)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          {historique.length === 0 ? (
+            <EmptyState title={t('quest.historyEmpty')} />
+          ) : (
+            <ul data-quest="list">
+              {historique.map(d => {
+                const acte = foyer.actes.find(a => a.id === d.acteId);
+                return (
+                  <li key={d.id}>
+                    <div
+                      data-quest="row"
+                      style={{ justifyContent: 'space-between' }}
+                    >
+                      <span>{acte?.titre ?? d.acteId}</span>
+                      <span data-quest="supporting">
+                        {t(`quest.status.${d.statut}`)}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      ) : null}
+
+      {onglet === 'inbox' && !lectureSeule ? (
         <Card>
           <CardHeader title={t('quest.inbox')} />
           {pending.length === 0 ? (
@@ -350,6 +432,7 @@ export function ParentView() {
                             return;
                           }
                           hapticSuccess();
+                          playQuestSound('ok');
                           trackQuest('valider');
                           const toastId = toast.show(t('quest.validated'), {
                             duration: 0,
@@ -389,7 +472,7 @@ export function ParentView() {
         </Card>
       ) : null}
 
-      {onglet === 'actions' ? (
+      {onglet === 'actions' && !lectureSeule ? (
         <>
           <Card>
             <CardHeader title={t('quest.manualCredit')} />
@@ -520,66 +603,203 @@ export function ParentView() {
                 label={t('quest.qrCoparent')}
               />
             </div>
-            <TextField
-              label={t('quest.foyerName')}
-              value={nomFoyer}
-              onChange={e => setNomFoyer(e.target.value)}
-            />
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 'var(--spacing-2)',
-              }}
-            >
-              <TextField
-                label={t('quest.pointsTaux')}
-                type="number"
-                value={pts}
-                onChange={e => setPts(e.target.value)}
-              />
-              <TextField
-                label={t('quest.minutesTaux')}
-                type="number"
-                value={mins}
-                onChange={e => setMins(e.target.value)}
-              />
-            </div>
-            <Button
-              onClick={() => {
-                const err = majFoyer({
-                  nom: nomFoyer,
-                  pointsTaux: Number(pts),
-                  minutesTaux: Number(mins),
-                });
-                toast.show(messageErreur(err, t, t('quest.foyerSaved')));
-              }}
-            >
-              {t('quest.saveFoyer')}
-            </Button>
             <div data-quest="row">
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const err = regenererCode('enfant');
-                  toast.show(messageErreur(err, t, t('quest.codeRegen')));
-                }}
+                onClick={() =>
+                  void partagerInvitation(foyer.codeEnfant).then(r => {
+                    toast.show(
+                      r === 'shared'
+                        ? t('quest.shareDone')
+                        : r === 'copied'
+                          ? t('quest.shareCopied')
+                          : t('quest.shareFailed')
+                    );
+                  })
+                }
               >
-                {t('quest.regenChildCode')}
+                {t('quest.shareInvite')}
               </Button>
               <Button
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 onClick={() => {
-                  const err = regenererCode('coparent');
-                  toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                  const next = !soundOn;
+                  setSonActive(next);
+                  setSoundOn(next);
+                  toast.show(next ? t('quest.soundOn') : t('quest.soundOff'));
                 }}
               >
-                {t('quest.regenParentCode')}
+                {t('quest.soundToggle')}
               </Button>
             </div>
-            {coParents.length > 0 ? (
+            {foyer.codeLecture ? (
+              <p data-quest="supporting">
+                {t('quest.lectureCode')} : {foyer.codeLecture}
+              </p>
+            ) : null}
+            {!lectureSeule ? (
+              <>
+                <TextField
+                  label={t('quest.foyerName')}
+                  value={nomFoyer}
+                  onChange={e => setNomFoyer(e.target.value)}
+                />
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    gap: 'var(--spacing-2)',
+                  }}
+                >
+                  <TextField
+                    label={t('quest.pointsTaux')}
+                    type="number"
+                    value={pts}
+                    onChange={e => setPts(e.target.value)}
+                  />
+                  <TextField
+                    label={t('quest.minutesTaux')}
+                    type="number"
+                    value={mins}
+                    onChange={e => setMins(e.target.value)}
+                  />
+                  <TextField
+                    label={t('quest.plafondLabel')}
+                    type="number"
+                    value={plafond}
+                    onChange={e => setPlafond(e.target.value)}
+                  />
+                </div>
+                <p data-quest="supporting">{t('quest.plafondHint')}</p>
+                <Button
+                  onClick={() => {
+                    const err = majFoyer({
+                      nom: nomFoyer,
+                      pointsTaux: Number(pts),
+                      minutesTaux: Number(mins),
+                      plafondMinutesJour: Number(plafond) || null,
+                    });
+                    toast.show(messageErreur(err, t, t('quest.foyerSaved')));
+                  }}
+                >
+                  {t('quest.saveFoyer')}
+                </Button>
+                <div data-quest="row">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const err = regenererCode('enfant');
+                      toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                    }}
+                  >
+                    {t('quest.regenChildCode')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const err = regenererCode('coparent');
+                      toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                    }}
+                  >
+                    {t('quest.regenParentCode')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const err = regenererCode('lecture');
+                      toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                    }}
+                  >
+                    {t('quest.regenLectureCode')}
+                  </Button>
+                </div>
+                {enfants.map(e => (
+                  <div key={e.id} data-quest="stack">
+                    <p data-quest="label">
+                      <AvatarInitiales membre={e} size={22} /> {e.displayName}
+                    </p>
+                    <div data-quest="row">
+                      {AVATAR_EMOJIS.map(em => (
+                        <Button
+                          key={em}
+                          size="sm"
+                          variant={e.avatarEmoji === em ? 'primary' : 'outline'}
+                          onClick={() => {
+                            const err = majAvatar(e.id, { avatarEmoji: em });
+                            if (!err) trackQuest('avatar');
+                          }}
+                        >
+                          {em}
+                        </Button>
+                      ))}
+                    </div>
+                    <div data-quest="row">
+                      {AVATAR_COLORS.map(c => (
+                        <Button
+                          key={c}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => majAvatar(e.id, { avatarColor: c })}
+                          style={{ background: c, minWidth: 28 }}
+                          aria-label={t('quest.avatarColor')}
+                        >
+                          {' '}
+                        </Button>
+                      ))}
+                    </div>
+                    <TextField
+                      label={t('quest.pinLabel')}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pinDraft[e.id] ?? ''}
+                      onChange={ev =>
+                        setPinDraft(prev => ({
+                          ...prev,
+                          [e.id]: ev.target.value
+                            .replace(/\D/g, '')
+                            .slice(0, 4),
+                        }))
+                      }
+                    />
+                    <div data-quest="row">
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          void definirPin(e.id, pinDraft[e.id] ?? '').then(
+                            err =>
+                              toast.show(
+                                messageErreur(err, t, t('quest.pinSet'))
+                              )
+                          )
+                        }
+                      >
+                        {t('quest.pinSetAction')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void definirPin(e.id, null).then(err =>
+                            toast.show(
+                              messageErreur(err, t, t('quest.pinClear'))
+                            )
+                          )
+                        }
+                      >
+                        {t('quest.pinClearAction')}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : null}
+            {!lectureSeule && coParents.length > 0 ? (
               <div data-quest="stack">
                 <p data-quest="label">{t('quest.transferTitle')}</p>
                 <p data-quest="supporting">{t('quest.transferHint')}</p>
@@ -622,22 +842,26 @@ export function ParentView() {
                 </div>
               </div>
             ) : null}
-            <TextField
-              label={t('quest.addChild')}
-              value={nouvelEnfant}
-              onChange={e => setNouvelEnfant(e.target.value)}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const err = ajouterMembre('enfant', nouvelEnfant);
-                if (!err) setNouvelEnfant('');
-                toast.show(messageErreur(err, t, t('quest.childAdded')));
-              }}
-            >
-              {t('quest.addChildAction')}
-            </Button>
+            {!lectureSeule ? (
+              <>
+                <TextField
+                  label={t('quest.addChild')}
+                  value={nouvelEnfant}
+                  onChange={e => setNouvelEnfant(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const err = ajouterMembre('enfant', nouvelEnfant);
+                    if (!err) setNouvelEnfant('');
+                    toast.show(messageErreur(err, t, t('quest.childAdded')));
+                  }}
+                >
+                  {t('quest.addChildAction')}
+                </Button>
+              </>
+            ) : null}
             <ul data-quest="list">
               {[...parents, ...enfants].map(m => (
                 <li
@@ -669,7 +893,7 @@ export function ParentView() {
         </Card>
       ) : null}
 
-      {onglet === 'actes' ? (
+      {onglet === 'actes' && !lectureSeule ? (
         <Card>
           <CardHeader title={t('quest.actsAdmin')} />
           <ul data-quest="list" style={{ marginBottom: 'var(--spacing-3)' }}>

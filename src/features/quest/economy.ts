@@ -50,6 +50,22 @@ export function soldeMinutes(foyer: Foyer, enfantId: string): number {
   return Math.max(0, total);
 }
 
+/** Minutes créditées (hors consommation) le jour Paris donné. */
+export function minutesGagneesJour(
+  foyer: Foyer,
+  enfantId: string,
+  jour = jourParis()
+): number {
+  return foyer.mouvements
+    .filter(
+      m =>
+        m.enfantId === enfantId &&
+        m.minutes > 0 &&
+        jourParis(m.createdAt) === jour
+    )
+    .reduce((acc, m) => acc + m.minutes, 0);
+}
+
 /**
  * Met à jour la série après une validation du jour.
  * Si le palier est atteint : bonus + reset à 0.

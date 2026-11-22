@@ -233,7 +233,7 @@ describe('useQuest MVP3', () => {
 });
 
 describe('useQuest MVP5', () => {
-  it('annule une validation pendant le sursis', () => {
+  it('annule une validation pendant le sursis (port non écrit)', () => {
     const state = useQuest.getState();
     const enfant = state.foyer.membres.find(m => m.role === 'enfant')!;
     const parent = state.foyer.membres.find(m => m.role === 'parent')!;
@@ -254,6 +254,19 @@ describe('useQuest MVP5', () => {
       'en_attente'
     );
     expect(useQuest.getState().pendingUndo).toBeNull();
+  });
+
+  it('refuse une validation si le plafond journalier est atteint', () => {
+    const state = useQuest.getState();
+    const enfant = state.foyer.membres.find(m => m.role === 'enfant')!;
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    const acte = state.foyer.actes.find(a => a.titre === 'Faire son lit')!;
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+    expect(state.majFoyer({ plafondMinutesJour: 5 })).toBeNull();
+    expect(state.creditManuel(acte.id, [enfant.id], parent.id)).toBeNull();
+    expect(
+      useQuest.getState().creditManuel(acte.id, [enfant.id], parent.id)
+    ).toBe('plafond-jour');
   });
 
   it('transfère le propriétaire vers un parent lié', () => {

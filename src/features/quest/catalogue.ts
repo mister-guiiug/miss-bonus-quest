@@ -102,6 +102,8 @@ export function foyerSeed(nom = 'Notre foyer'): Foyer {
     minutesTaux: 5,
     codeEnfant: 'BONUS',
     codeCoparent: 'PARENT',
+    codeLecture: '',
+    plafondMinutesJour: null,
     membres: [parent, ...enfants],
     actes: catalogueInitial(),
     declarations: [],

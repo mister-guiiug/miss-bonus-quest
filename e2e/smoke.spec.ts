@@ -24,6 +24,7 @@ test.describe('@critical le cadre', () => {
     await expect(page.getByText('Ton foyer')).toBeVisible();
     await passerPorte(page);
     await expect(page.getByText('Qui joue ?')).toBeVisible();
+    // passerPorte a validé le formulaire de création (défauts Léa / Tom).
     await expect(page.getByRole('button', { name: 'Parent' })).toBeVisible();
     await expect(page.getByLabel('Code foyer')).toBeVisible();
     // Léa n’apparaît qu’après le code d’invitation.

@@ -36,6 +36,7 @@ personne à la rediscuter.
 | [0015](./0015-astryx-et-sync-vivante.md)        | Grammaire Astryx + sync vivante (auth, file, Realtime, conflits) |
 | [0016](./0016-auth-codes-hash-et-carnet.md)     | Compte parent lié, codes hashés, pull enfant, carnet             |
 | [0017](./0017-mvp5-porte-undo-et-lazy.md)       | Porte créer/rejoindre, undo validation, lazy parent/enfant       |
+| [0018](./0018-mvp6-pin-plafond-undo-port.md)    | PIN, plafond jour, undo sur le port, lecture seule               |
 
 ## Quand une application s'écarte
 

@@ -1,9 +1,13 @@
 import { create } from 'zustand';
 import { createId } from '@mister-guiiug/dev-pwa-config/id';
 import { generateCode } from '@mister-guiiug/dev-pwa-config/pairing';
+import { archiverFoyer } from './archive.ts';
+import { catalogueInitial } from './catalogue.ts';
+import { hashCode } from './codes.ts';
 import {
   avancerStreak,
   jourParis,
+  minutesGagneesJour,
   minutesPourActe,
   soldeMinutes,
 } from './economy.ts';
@@ -102,13 +106,29 @@ interface QuestState {
   solde: (enfantId: string) => number;
   deverrouillerParCode: (
     code: string
-  ) => { role: 'enfant' | 'coparent' } | null;
+  ) => { role: 'enfant' | 'coparent' | 'lecture' } | null;
   majFoyer: (patch: {
     nom?: string;
     pointsTaux?: number;
     minutesTaux?: number;
+    plafondMinutesJour?: number | null;
   }) => string | null;
-  regenererCode: (quel: 'enfant' | 'coparent') => string | null;
+  regenererCode: (quel: 'enfant' | 'coparent' | 'lecture') => string | null;
+  /**
+   * Remplace le seed par un foyer nommé (premier lancement).
+   * `enfants` vide → catalogue + parent seul.
+   */
+  creerFoyerPersonnalise: (opts: {
+    nom: string;
+    parentNom: string;
+    enfants: string[];
+  }) => string | null;
+  definirPin: (membreId: string, pin: string | null) => Promise<string | null>;
+  verifierPin: (membreId: string, pin: string) => Promise<boolean>;
+  majAvatar: (
+    membreId: string,
+    patch: { avatarEmoji?: string | null; avatarColor?: string | null }
+  ) => string | null;
   ajouterMembre: (
     role: 'parent' | 'enfant',
     displayName: string
@@ -138,12 +158,30 @@ interface QuestState {
 }
 
 function sauver(foyer: Foyer) {
-  const stamped: Foyer = {
+  const stamped: Foyer = archiverFoyer({
     ...foyer,
     updatedAt: new Date().toISOString(),
-  };
+  });
   foyerStore.save(stamped);
   return stamped;
+}
+
+function refuseSiLecture(get: () => QuestState): string | null {
+  if (get().session?.lectureSeule) return 'lecture-seule';
+  return null;
+}
+
+function depassePlafond(
+  foyer: Foyer,
+  enfantIds: string[],
+  minutesAjout: number,
+  jour: string
+): boolean {
+  const plafond = foyer.plafondMinutesJour;
+  if (!plafond || plafond <= 0) return false;
+  return enfantIds.some(
+    id => minutesGagneesJour(foyer, id, jour) + minutesAjout > plafond
+  );
 }
 
 export const useQuest = create<QuestState>((set, get) => ({
@@ -202,6 +240,9 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   declarer(acteId, participants) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
     const { foyer, session } = get();
     if (!session || session.role !== 'enfant') return 'session-enfant-requise';
     const acte = foyer.actes.find(a => a.id === acteId && a.actif);
@@ -243,6 +284,8 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   valider(declarationId, parentId) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
     const { foyer } = get();
     const parent = foyer.membres.find(
       m => m.id === parentId && m.role === 'parent'
@@ -266,6 +309,10 @@ export const useQuest = create<QuestState>((set, get) => ({
       foyer.pointsTaux,
       foyer.minutesTaux
     );
+
+    if (depassePlafond(foyer, decl.participants, minutes, jour)) {
+      return 'plafond-jour';
+    }
 
     const mouvements: MouvementSolde[] = [...foyer.mouvements];
     const streaks = { ...foyer.streaks };
@@ -309,6 +356,7 @@ export const useQuest = create<QuestState>((set, get) => ({
 
     const next: Foyer = {
       ...foyer,
+      updatedAt: now,
       mouvements,
       streaks,
       declarations: foyer.declarations.map(d =>
@@ -322,11 +370,16 @@ export const useQuest = create<QuestState>((set, get) => ({
           : d
       ),
     };
-    set({ foyer: sauver(next), pendingUndo: avant });
+    // Mémoire seule : le port garde `avant` jusqu’au soldage (ADR 0018).
+    set({ foyer: next, pendingUndo: avant });
     if (undoTimer) clearTimeout(undoTimer);
     undoTimer = setTimeout(() => {
       undoTimer = null;
-      set({ pendingUndo: null });
+      const state = get();
+      if (state.pendingUndo) {
+        foyerStore.save(state.foyer);
+        set({ pendingUndo: null });
+      }
     }, UNDO_MS);
     return null;
   },
@@ -338,14 +391,19 @@ export const useQuest = create<QuestState>((set, get) => ({
       clearTimeout(undoTimer);
       undoTimer = null;
     }
-    foyerStore.save(pendingUndo);
+    // Le port n’a jamais reçu la validation.
     set({ foyer: pendingUndo, pendingUndo: null });
   },
 
   soldUndo() {
+    const { pendingUndo, foyer } = get();
     if (undoTimer) {
       clearTimeout(undoTimer);
       undoTimer = null;
+    }
+    // ADR 0018 : la validation n’atteint le port qu’à l’expiration / soldage.
+    if (pendingUndo) {
+      foyerStore.save(foyer);
     }
     set({ pendingUndo: null });
   },
@@ -378,6 +436,9 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   refuser(declarationId, parentId, motif) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
     const { foyer } = get();
     const parent = foyer.membres.find(
       m => m.id === parentId && m.role === 'parent'
@@ -407,6 +468,9 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   creditManuel(acteId, enfantIds, parentId) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
     const { foyer } = get();
     const parent = foyer.membres.find(
       m => m.id === parentId && m.role === 'parent'
@@ -422,6 +486,9 @@ export const useQuest = create<QuestState>((set, get) => ({
       foyer.pointsTaux,
       foyer.minutesTaux
     );
+    if (depassePlafond(foyer, enfantIds, minutes, jourParis(now))) {
+      return 'plafond-jour';
+    }
 
     const declaration: Declaration = {
       id: createId('decl'),
@@ -460,6 +527,9 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   consommer(enfantId, minutes, parentId) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
     const { foyer } = get();
     const parent = foyer.membres.find(
       m => m.id === parentId && m.role === 'parent'
@@ -504,10 +574,16 @@ export const useQuest = create<QuestState>((set, get) => ({
     const { foyer } = get();
     if (c === foyer.codeEnfant.toUpperCase()) return { role: 'enfant' };
     if (c === foyer.codeCoparent.toUpperCase()) return { role: 'coparent' };
+    if (foyer.codeLecture && c === foyer.codeLecture.toUpperCase()) {
+      return { role: 'lecture' };
+    }
     return null;
   },
 
   majFoyer(patch) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
     const { foyer, session } = get();
     if (!session || session.role !== 'parent') return 'parent-inconnu';
     const next: Foyer = {
@@ -515,6 +591,10 @@ export const useQuest = create<QuestState>((set, get) => ({
       nom: patch.nom?.trim() || foyer.nom,
       pointsTaux: patch.pointsTaux ?? foyer.pointsTaux,
       minutesTaux: patch.minutesTaux ?? foyer.minutesTaux,
+      plafondMinutesJour:
+        patch.plafondMinutesJour !== undefined
+          ? patch.plafondMinutesJour
+          : foyer.plafondMinutesJour,
     };
     if (next.pointsTaux <= 0) return 'taux-invalide';
     if (next.minutesTaux < 0) return 'taux-invalide';
@@ -522,19 +602,141 @@ export const useQuest = create<QuestState>((set, get) => ({
     return null;
   },
 
+  creerFoyerPersonnalise({ nom, parentNom, enfants }) {
+    get().soldUndo();
+    const n = nom.trim() || 'Notre foyer';
+    const pNom = parentNom.trim();
+    if (!pNom) return 'nom-requis';
+    const parent: Membre = {
+      id: createId('membre'),
+      role: 'parent',
+      displayName: pNom,
+      actif: true,
+    };
+    const kids: Membre[] = enfants
+      .map(e => e.trim())
+      .filter(Boolean)
+      .map(displayName => ({
+        id: createId('membre'),
+        role: 'enfant' as const,
+        displayName,
+        actif: true,
+      }));
+    const next: Foyer = {
+      id: createId('foyer'),
+      nom: n,
+      pointsTaux: 10,
+      minutesTaux: 5,
+      // Codes stables d’exemple — régénérables ensuite (e2e / démo).
+      codeEnfant: 'BONUS',
+      codeCoparent: 'PARENT',
+      codeLecture: '',
+      plafondMinutesJour: null,
+      membres: [parent, ...kids],
+      actes: catalogueInitial(),
+      declarations: [],
+      mouvements: [],
+      streaks: {},
+      updatedAt: new Date().toISOString(),
+    };
+    ecrireSession(null);
+    set({ foyer: sauver(next), session: null });
+    return null;
+  },
+
+  async definirPin(membreId, pin) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    const cible = foyer.membres.find(
+      m => m.id === membreId && m.role === 'enfant'
+    );
+    if (!cible) return 'enfant-inconnu';
+    if (pin === null || pin === '') {
+      const next: Foyer = {
+        ...foyer,
+        membres: foyer.membres.map(m =>
+          m.id === membreId ? { ...m, pinHash: null } : m
+        ),
+      };
+      set({ foyer: sauver(next) });
+      return null;
+    }
+    if (!/^\d{4}$/.test(pin)) return 'pin-invalide';
+    const pinHash = await hashCode(pin);
+    const next: Foyer = {
+      ...foyer,
+      membres: foyer.membres.map(m =>
+        m.id === membreId ? { ...m, pinHash } : m
+      ),
+    };
+    set({ foyer: sauver(next) });
+    return null;
+  },
+
+  async verifierPin(membreId, pin) {
+    const { foyer } = get();
+    const cible = foyer.membres.find(m => m.id === membreId);
+    if (!cible?.pinHash) return true;
+    if (!/^\d{4}$/.test(pin)) return false;
+    const h = await hashCode(pin);
+    return h === cible.pinHash;
+  },
+
+  majAvatar(membreId, patch) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
+    const { foyer, session } = get();
+    if (!session) return 'membre-inconnu';
+    if (session.role === 'parent' || session.membreId === membreId) {
+      const next: Foyer = {
+        ...foyer,
+        membres: foyer.membres.map(m =>
+          m.id === membreId
+            ? {
+                ...m,
+                avatarEmoji:
+                  patch.avatarEmoji !== undefined
+                    ? patch.avatarEmoji
+                    : m.avatarEmoji,
+                avatarColor:
+                  patch.avatarColor !== undefined
+                    ? patch.avatarColor
+                    : m.avatarColor,
+              }
+            : m
+        ),
+      };
+      set({ foyer: sauver(next) });
+      return null;
+    }
+    return 'membre-inconnu';
+  },
+
   regenererCode(quel) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
     const { foyer, session } = get();
     if (!session || session.role !== 'parent') return 'parent-inconnu';
     const next: Foyer = {
       ...foyer,
       codeEnfant: quel === 'enfant' ? nouveauCode() : foyer.codeEnfant,
       codeCoparent: quel === 'coparent' ? nouveauCode() : foyer.codeCoparent,
+      codeLecture:
+        quel === 'lecture' ? nouveauCode(6) : (foyer.codeLecture ?? ''),
     };
     set({ foyer: sauver(next) });
     return null;
   },
 
   ajouterMembre(role, displayName) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
     const { foyer, session } = get();
     if (!session || session.role !== 'parent') return 'parent-inconnu';
     const nom = displayName.trim();
