@@ -150,6 +150,20 @@ test.describe('@critical le cadre', () => {
     ).toHaveCount(0);
   });
 
+  test('le hook e2e=conflict affiche la bannière de conflit', async ({
+    page,
+  }) => {
+    await page.goto('/?e2e=conflict');
+    await passerPorte(page);
+    await page.getByRole('button', { name: 'Parent' }).click();
+    await expect(page.getByText('Versions en conflit')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Garder cet appareil' })
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Garder cet appareil' }).click();
+    await expect(page.getByText('Versions en conflit')).toHaveCount(0);
+  });
+
   test('la navigation atteint les quatre destinations', async ({ page }) => {
     await page.goto('/');
 

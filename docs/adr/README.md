@@ -37,6 +37,7 @@ personne à la rediscuter.
 | [0016](./0016-auth-codes-hash-et-carnet.md)     | Compte parent lié, codes hashés, pull enfant, carnet             |
 | [0017](./0017-mvp5-porte-undo-et-lazy.md)       | Porte créer/rejoindre, undo validation, lazy parent/enfant       |
 | [0018](./0018-mvp6-pin-plafond-undo-port.md)    | PIN, plafond jour, undo sur le port, lecture seule               |
+| [0019](./0019-mvp7-plafond-ui-multi-aine.md)    | Plafond UI, multi-validation, mode aîné, validation figée        |
 
 ## Quand une application s'écarte
 

@@ -40,6 +40,8 @@ export interface Membre {
   avatarEmoji?: string | null;
   /** Couleur CSS d’avatar (sinon muted). */
   avatarColor?: string | null;
+  /** Frère aîné : peut valider les déclarations des plus jeunes. */
+  peutValider?: boolean;
 }
 
 export interface Declaration {
@@ -88,6 +90,10 @@ export interface Foyer {
    * `null` ou `0` = pas de plafond.
    */
   plafondMinutesJour?: number | null;
+  /** Objectif collectif de minutes gagnées sur la semaine. */
+  objectifMinutesSemaine?: number | null;
+  /** Accent CSS du foyer (thème léger). */
+  accentColor?: string | null;
   membres: Membre[];
   actes: Acte[];
   declarations: Declaration[];

@@ -104,6 +104,8 @@ export function foyerSeed(nom = 'Notre foyer'): Foyer {
     codeCoparent: 'PARENT',
     codeLecture: '',
     plafondMinutesJour: null,
+    objectifMinutesSemaine: null,
+    accentColor: null,
     membres: [parent, ...enfants],
     actes: catalogueInitial(),
     declarations: [],

@@ -28,6 +28,7 @@ const membreSchema = z.object({
   pinHash: z.string().min(1).nullable().optional(),
   avatarEmoji: z.string().min(1).nullable().optional(),
   avatarColor: z.string().min(1).nullable().optional(),
+  peutValider: z.boolean().optional(),
 });
 
 const declarationSchema = z.object({
@@ -73,6 +74,8 @@ export const foyerSchema = z.object({
   codeCoparent: z.string().min(1),
   codeLecture: z.string().optional(),
   plafondMinutesJour: z.number().int().nonnegative().nullable().optional(),
+  objectifMinutesSemaine: z.number().int().nonnegative().nullable().optional(),
+  accentColor: z.string().min(1).nullable().optional(),
   membres: z.array(membreSchema).min(1),
   actes: z.array(acteSchema),
   declarations: z.array(declarationSchema),

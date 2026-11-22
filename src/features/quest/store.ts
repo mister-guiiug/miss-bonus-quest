@@ -81,7 +81,12 @@ interface QuestState {
   setConflict: (foyer: Foyer | null) => void;
   resoudreConflit: (choix: 'local' | 'cloud') => void;
   declarer: (acteId: string, participants: string[]) => string | null;
-  valider: (declarationId: string, parentId: string) => string | null;
+  valider: (declarationId: string, valideurId: string) => string | null;
+  /** Valide plusieurs déclarations en un seul sursis. */
+  validerPlusieurs: (
+    declarationIds: string[],
+    valideurId: string
+  ) => string | null;
   /** Restaure le foyer d’avant la dernière validation (sursis). */
   annulerDerniereValidation: () => void;
   /** Solde le sursis sans restaurer — quitter l’écran / nouvelle mutation. */
@@ -112,7 +117,10 @@ interface QuestState {
     pointsTaux?: number;
     minutesTaux?: number;
     plafondMinutesJour?: number | null;
+    objectifMinutesSemaine?: number | null;
+    accentColor?: string | null;
   }) => string | null;
+  setPeutValider: (membreId: string, peutValider: boolean) => string | null;
   regenererCode: (quel: 'enfant' | 'coparent' | 'lecture') => string | null;
   /**
    * Remplace le seed par un foyer nommé (premier lancement).
@@ -182,6 +190,27 @@ function depassePlafond(
   return enfantIds.some(
     id => minutesGagneesJour(foyer, id, jour) + minutesAjout > plafond
   );
+}
+
+function peutTrancher(
+  foyer: Foyer,
+  valideurId: string,
+  decl: Declaration
+): boolean {
+  const m = foyer.membres.find(x => x.id === valideurId && x.actif);
+  if (!m) return false;
+  if (m.role === 'parent') return true;
+  if (m.role === 'enfant' && m.peutValider) {
+    return (
+      decl.declarePar !== valideurId && !decl.participants.includes(valideurId)
+    );
+  }
+  return false;
+}
+
+function signalerValidationFigee(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('quest:validation-figee'));
 }
 
 export const useQuest = create<QuestState>((set, get) => ({
@@ -283,95 +312,96 @@ export const useQuest = create<QuestState>((set, get) => ({
     return null;
   },
 
-  valider(declarationId, parentId) {
+  valider(declarationId, valideurId) {
+    return get().validerPlusieurs([declarationId], valideurId);
+  },
+
+  validerPlusieurs(declarationIds, valideurId) {
     const lecture = refuseSiLecture(get);
     if (lecture) return lecture;
     const { foyer } = get();
-    const parent = foyer.membres.find(
-      m => m.id === parentId && m.role === 'parent'
-    );
-    if (!parent) return 'parent-inconnu';
-
-    const decl = foyer.declarations.find(d => d.id === declarationId);
-    if (!decl) return 'declaration-inconnue';
-    if (decl.statut !== 'en_attente') return 'deja-decidee';
-
-    const acte = foyer.actes.find(a => a.id === decl.acteId);
-    if (!acte) return 'acte-inconnu';
+    const ids = [...new Set(declarationIds)];
+    if (ids.length === 0) return 'declaration-inconnue';
 
     get().soldUndo();
     const avant: Foyer = structuredClone(foyer);
-
+    let working: Foyer = structuredClone(foyer);
     const now = new Date().toISOString();
     const jour = jourParis(now);
-    const { minutes, fromPoints } = minutesPourActe(
-      acte,
-      foyer.pointsTaux,
-      foyer.minutesTaux
-    );
 
-    if (depassePlafond(foyer, decl.participants, minutes, jour)) {
-      return 'plafond-jour';
-    }
+    for (const declarationId of ids) {
+      const decl = working.declarations.find(d => d.id === declarationId);
+      if (!decl || decl.statut !== 'en_attente') return 'deja-decidee';
+      if (!peutTrancher(working, valideurId, decl)) return 'parent-inconnu';
 
-    const mouvements: MouvementSolde[] = [...foyer.mouvements];
-    const streaks = { ...foyer.streaks };
+      const acte = working.actes.find(a => a.id === decl.acteId);
+      if (!acte) return 'acte-inconnu';
 
-    for (const enfantId of decl.participants) {
-      mouvements.push({
-        id: createId('mvt'),
-        enfantId,
-        type: 'credit_validation',
-        minutes,
-        pointsSource: fromPoints > 0 ? acte.points : null,
-        declarationId: decl.id,
-        note: null,
-        createdAt: now,
-        createdBy: parentId,
-      });
-
-      const key = streakKey(enfantId, acte.id);
-      const { progress, bonusMinutes, bonusPoints } = avancerStreak(
-        streaks[key],
+      const { minutes, fromPoints } = minutesPourActe(
         acte,
-        jour,
-        foyer.pointsTaux,
-        foyer.minutesTaux
+        working.pointsTaux,
+        working.minutesTaux
       );
-      streaks[key] = progress;
-      if (bonusMinutes > 0) {
+      if (depassePlafond(working, decl.participants, minutes, jour)) {
+        return 'plafond-jour';
+      }
+
+      const mouvements: MouvementSolde[] = [...working.mouvements];
+      const streaks = { ...working.streaks };
+      for (const enfantId of decl.participants) {
         mouvements.push({
           id: createId('mvt'),
           enfantId,
-          type: 'bonus_streak',
-          minutes: bonusMinutes,
-          pointsSource: bonusPoints > 0 ? bonusPoints : null,
+          type: 'credit_validation',
+          minutes,
+          pointsSource: fromPoints > 0 ? acte.points : null,
           declarationId: decl.id,
-          note: `Palier ${acte.streak?.joursRequis ?? 0} jours`,
+          note: null,
           createdAt: now,
-          createdBy: parentId,
+          createdBy: valideurId,
         });
+        const key = streakKey(enfantId, acte.id);
+        const { progress, bonusMinutes, bonusPoints } = avancerStreak(
+          streaks[key],
+          acte,
+          jour,
+          working.pointsTaux,
+          working.minutesTaux
+        );
+        streaks[key] = progress;
+        if (bonusMinutes > 0) {
+          mouvements.push({
+            id: createId('mvt'),
+            enfantId,
+            type: 'bonus_streak',
+            minutes: bonusMinutes,
+            pointsSource: bonusPoints > 0 ? bonusPoints : null,
+            declarationId: decl.id,
+            note: `Palier ${acte.streak?.joursRequis ?? 0} jours`,
+            createdAt: now,
+            createdBy: valideurId,
+          });
+        }
       }
+      working = {
+        ...working,
+        updatedAt: now,
+        mouvements,
+        streaks,
+        declarations: working.declarations.map(d =>
+          d.id === declarationId
+            ? {
+                ...d,
+                statut: 'validee' as const,
+                validePar: valideurId,
+                decidedAt: now,
+              }
+            : d
+        ),
+      };
     }
 
-    const next: Foyer = {
-      ...foyer,
-      updatedAt: now,
-      mouvements,
-      streaks,
-      declarations: foyer.declarations.map(d =>
-        d.id === declarationId
-          ? {
-              ...d,
-              statut: 'validee' as const,
-              validePar: parentId,
-              decidedAt: now,
-            }
-          : d
-      ),
-    };
-    // Mémoire seule : le port garde `avant` jusqu’au soldage (ADR 0018).
-    set({ foyer: next, pendingUndo: avant });
+    set({ foyer: working, pendingUndo: avant });
     if (undoTimer) clearTimeout(undoTimer);
     undoTimer = setTimeout(() => {
       undoTimer = null;
@@ -379,6 +409,7 @@ export const useQuest = create<QuestState>((set, get) => ({
       if (state.pendingUndo) {
         foyerStore.save(state.foyer);
         set({ pendingUndo: null });
+        signalerValidationFigee();
       }
     }, UNDO_MS);
     return null;
@@ -404,6 +435,7 @@ export const useQuest = create<QuestState>((set, get) => ({
     // ADR 0018 : la validation n’atteint le port qu’à l’expiration / soldage.
     if (pendingUndo) {
       foyerStore.save(foyer);
+      signalerValidationFigee();
     }
     set({ pendingUndo: null });
   },
@@ -435,18 +467,15 @@ export const useQuest = create<QuestState>((set, get) => ({
     return null;
   },
 
-  refuser(declarationId, parentId, motif) {
+  refuser(declarationId, valideurId, motif) {
     const lecture = refuseSiLecture(get);
     if (lecture) return lecture;
     get().soldUndo();
     const { foyer } = get();
-    const parent = foyer.membres.find(
-      m => m.id === parentId && m.role === 'parent'
-    );
-    if (!parent) return 'parent-inconnu';
     const decl = foyer.declarations.find(d => d.id === declarationId);
     if (!decl) return 'declaration-inconnue';
     if (decl.statut !== 'en_attente') return 'deja-decidee';
+    if (!peutTrancher(foyer, valideurId, decl)) return 'parent-inconnu';
 
     const now = new Date().toISOString();
     const next: Foyer = {
@@ -457,7 +486,7 @@ export const useQuest = create<QuestState>((set, get) => ({
               ...d,
               statut: 'refusee' as const,
               motifRefus: motif?.trim() || null,
-              validePar: parentId,
+              validePar: valideurId,
               decidedAt: now,
             }
           : d
@@ -595,9 +624,35 @@ export const useQuest = create<QuestState>((set, get) => ({
         patch.plafondMinutesJour !== undefined
           ? patch.plafondMinutesJour
           : foyer.plafondMinutesJour,
+      objectifMinutesSemaine:
+        patch.objectifMinutesSemaine !== undefined
+          ? patch.objectifMinutesSemaine
+          : foyer.objectifMinutesSemaine,
+      accentColor:
+        patch.accentColor !== undefined ? patch.accentColor : foyer.accentColor,
     };
     if (next.pointsTaux <= 0) return 'taux-invalide';
     if (next.minutesTaux < 0) return 'taux-invalide';
+    set({ foyer: sauver(next) });
+    return null;
+  },
+
+  setPeutValider(membreId, peutValider) {
+    const lecture = refuseSiLecture(get);
+    if (lecture) return lecture;
+    get().soldUndo();
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    const cible = foyer.membres.find(
+      m => m.id === membreId && m.role === 'enfant'
+    );
+    if (!cible) return 'enfant-inconnu';
+    const next: Foyer = {
+      ...foyer,
+      membres: foyer.membres.map(m =>
+        m.id === membreId ? { ...m, peutValider } : m
+      ),
+    };
     set({ foyer: sauver(next) });
     return null;
   },
@@ -632,6 +687,8 @@ export const useQuest = create<QuestState>((set, get) => ({
       codeCoparent: 'PARENT',
       codeLecture: '',
       plafondMinutesJour: null,
+      objectifMinutesSemaine: null,
+      accentColor: null,
       membres: [parent, ...kids],
       actes: catalogueInitial(),
       declarations: [],
