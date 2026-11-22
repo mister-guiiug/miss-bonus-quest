@@ -50,13 +50,15 @@ test.describe('@critical le cadre', () => {
       .filter({ hasText: 'Ranger sa chambre' });
     await pending.getByRole('button', { name: 'Valider' }).click();
     await expect(page.getByText('Rien en attente.')).toBeVisible();
-    await expect(page.getByText('Léa')).toBeVisible();
-    await expect(page.getByText('12 min').first()).toBeVisible();
+    const soldeLea = page.getByRole('listitem').filter({ hasText: 'Léa' });
+    await expect(soldeLea.getByText('12 min')).toBeVisible();
 
     // Session locale (sessionStorage) : le profil Parent reste après reload.
     await page.reload();
     await expect(page.getByText('Bonjour Parent')).toBeVisible();
-    await expect(page.getByText('12 min').first()).toBeVisible();
+    await expect(
+      page.getByRole('listitem').filter({ hasText: 'Léa' }).getByText('12 min')
+    ).toBeVisible();
   });
 
   test('crédit manuel et consommation sans solde négatif', async ({ page }) => {
@@ -221,8 +223,9 @@ test.describe('@critical le cadre', () => {
     await page.getByRole('button', { name: 'Léa' }).click();
     await expect(page.getByText('Acte importé')).toBeVisible();
     await expect(page.getByText('Mettre la table')).toHaveCount(0);
+    // La session enfant survit au reload : pas de nouveau clic « Léa ».
     await page.reload();
-    await page.getByRole('button', { name: 'Léa' }).click();
+    await expect(page.getByText('Bonjour Léa')).toBeVisible();
     await expect(page.getByText('Acte importé')).toBeVisible();
   });
 
