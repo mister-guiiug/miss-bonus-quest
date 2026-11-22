@@ -30,7 +30,10 @@ type Client = {
   rpc(
     fn: string,
     args?: Record<string, unknown>
-  ): Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
+  ): Promise<{
+    data: unknown;
+    error: { message: string; code?: string } | null;
+  }>;
 };
 
 /**

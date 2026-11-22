@@ -69,7 +69,9 @@ function RoleGate() {
   const appliquerFoyerDistant = useQuest(s => s.appliquerFoyerDistant);
   const parents = foyer.membres.filter(m => m.role === 'parent' && m.actif);
   const [code, setCode] = useState('');
-  const [porte, setPorte] = useState<'fermee' | 'enfant' | 'coparent'>('fermee');
+  const [porte, setPorte] = useState<'fermee' | 'enfant' | 'coparent'>(
+    'fermee'
+  );
 
   const enfants = foyer.membres.filter(m => m.role === 'enfant' && m.actif);
 
@@ -188,13 +190,7 @@ function SessionBar({ membre }: { membre: Membre }) {
   );
 }
 
-function StreakBadge({
-  jours,
-  requis,
-}: {
-  jours: number;
-  requis: number;
-}) {
+function StreakBadge({ jours, requis }: { jours: number; requis: number }) {
   const { t } = useI18n();
   return (
     <span
@@ -309,8 +305,7 @@ function ChildView() {
                                 : [...cur, e.id];
                               return {
                                 ...prev,
-                                [acte.id]:
-                                  next.length > 0 ? next : [membre.id],
+                                [acte.id]: next.length > 0 ? next : [membre.id],
                               };
                             })
                           }
@@ -355,10 +350,7 @@ function ChildView() {
             {historiques.slice(0, 20).map(d => {
               const acte = foyer.actes.find(a => a.id === d.acteId);
               return (
-                <li
-                  key={d.id}
-                  className="flex flex-col gap-0.5 text-sm"
-                >
+                <li key={d.id} className="flex flex-col gap-0.5 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <span>{acte?.titre ?? d.acteId}</span>
                     <span className="inline-flex items-center gap-1">
@@ -733,7 +725,10 @@ function ParentView() {
           </Button>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
             {[...parents, ...enfants].map(m => (
-              <li key={m.id} className="flex items-center justify-between gap-2">
+              <li
+                key={m.id}
+                className="flex items-center justify-between gap-2"
+              >
                 <span>
                   {m.displayName} ({m.role})
                 </span>
@@ -779,14 +774,15 @@ function ParentView() {
             </li>
           ))}
         </ul>
-        <div className="flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--dwc-border)' }}>
+        <div
+          className="flex flex-col gap-2 border-t pt-3"
+          style={{ borderColor: 'var(--dwc-border)' }}
+        >
           <p className="m-0 text-sm font-medium">{t('quest.newAct')}</p>
           <TextField
             label={t('quest.actTitle')}
             value={brouillon.titre}
-            onChange={e =>
-              setBrouillon(b => ({ ...b, titre: e.target.value }))
-            }
+            onChange={e => setBrouillon(b => ({ ...b, titre: e.target.value }))}
           />
           <TextField
             label={t('quest.actDesc')}

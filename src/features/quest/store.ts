@@ -94,15 +94,21 @@ interface QuestState {
     minutesTaux?: number;
   }) => string | null;
   regenererCode: (quel: 'enfant' | 'coparent') => string | null;
-  ajouterMembre: (role: 'parent' | 'enfant', displayName: string) => string | null;
+  ajouterMembre: (
+    role: 'parent' | 'enfant',
+    displayName: string
+  ) => string | null;
   retirerMembre: (membreId: string) => string | null;
-  upsertActe: (acteId: string | null, brouillon: ActeBrouillon) => string | null;
+  upsertActe: (
+    acteId: string | null,
+    brouillon: ActeBrouillon
+  ) => string | null;
   setActeActif: (acteId: string, actif: boolean) => string | null;
   appliquerFoyerDistant: (foyer: Foyer) => void;
   exportJson: () => string | null;
   importJson: (json: string) => number | null;
   reset: () => void;
-};
+}
 
 function sauver(foyer: Foyer) {
   foyerStore.save(foyer);

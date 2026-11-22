@@ -69,7 +69,10 @@ select set_eq(
     -- Aides de la RLS : elles ne rendent que ce qui concerne l'appelant, rien
     -- pour anon
     'has_role',
-    'is_admin'
+    'is_admin',
+    -- ADR 0014 : rejoindre un foyer par code d'invitation, sans session.
+    -- Le contrôle est le code lui-même (colonnes uniques, rotation parent).
+    'foyer_par_code'
   ],
   'les fonctions SECURITY DEFINER exécutables par anon sont exactement la liste relue'
 );

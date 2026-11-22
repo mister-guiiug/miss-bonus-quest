@@ -90,8 +90,9 @@ describe('useQuest MVP2', () => {
     const parent = state.foyer.membres.find(m => m.role === 'parent')!;
     state.choisirRole({ role: 'parent', membreId: parent.id });
 
-    expect(state.majFoyer({ nom: 'Chez nous', pointsTaux: 20, minutesTaux: 10 }))
-      .toBeNull();
+    expect(
+      state.majFoyer({ nom: 'Chez nous', pointsTaux: 20, minutesTaux: 10 })
+    ).toBeNull();
     expect(useQuest.getState().foyer.nom).toBe('Chez nous');
     expect(useQuest.getState().foyer.pointsTaux).toBe(20);
 
