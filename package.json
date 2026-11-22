@@ -7,7 +7,7 @@
   "engines": {
     "node": ">=24.21.0"
   },
-  "description": "Les enfants declarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d'ecran gagnees.",
+  "description": "Les enfants déclarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d’écran gagnées.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && pwa-bundle-budget && pwa-doctor --strict",
@@ -92,9 +92,5 @@
       "glob": "^14.0.6"
     }
   },
-  "pwaDoctor": {
-    "refus": {
-      "seo-content-pages": "née du générateur sans page de contenu : celles du squelette ne parlaient que de lui. Écrire la première dans content/pages/, puis retirer cette ligne."
-    }
-  }
+  "pwaDoctor": {}
 }
