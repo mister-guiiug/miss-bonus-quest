@@ -289,10 +289,7 @@ function ChildView() {
           <p data-quest="label">{t('quest.nextActTitle')}</p>
           <strong>{next.acte.titre}</strong>
           <p data-quest="supporting">
-            {t('quest.nextActHint', {
-              titre: next.acte.titre,
-              min: next.minutes,
-            })}
+            {t('quest.nextActHint', { min: next.minutes })}
           </p>
           {next.streakRequis ? (
             <StreakBadge jours={next.streakJours} requis={next.streakRequis} />

@@ -224,12 +224,18 @@ test.describe('@critical le cadre', () => {
 
     await page.goto('/');
     await deverrouillerEnfant(page, { code: 'IMPORT', enfant: 'Léa' });
-    await expect(page.getByText('Acte importé')).toBeVisible();
+    // Le bandeau « prochain acte » et la liste portent le même titre :
+    // cibler le listitem du catalogue, pas un getByText ambigu.
+    await expect(
+      page.getByRole('listitem').filter({ hasText: 'Acte importé' })
+    ).toBeVisible();
     await expect(page.getByText('Mettre la table')).toHaveCount(0);
     // La session enfant survit au reload : pas de nouveau code ni clic « Léa ».
     await page.reload();
     await expect(page.getByText('Bonjour Léa')).toBeVisible();
-    await expect(page.getByText('Acte importé')).toBeVisible();
+    await expect(
+      page.getByRole('listitem').filter({ hasText: 'Acte importé' })
+    ).toBeVisible();
   });
 
   test('la fiche d’installation se propose quand le navigateur le permet', async ({
