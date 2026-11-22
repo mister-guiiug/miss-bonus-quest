@@ -139,6 +139,29 @@ export async function rejoindreParCode(code: string): Promise<Foyer | string> {
   }
 }
 
+/** Transfert de propriétaire (RPC) — l’appelant doit être owner_id. */
+export async function transfererPropriete(
+  foyerId: string,
+  nouveauAuthId: string
+): Promise<string | null> {
+  if (!syncDisponible()) return 'sync-indisponible';
+  try {
+    const client = (await supabase.getClient()) as unknown as Client;
+    const { error } = await client.rpc('foyer_transferer_propriete', {
+      p_id: foyerId,
+      p_nouveau: nouveauAuthId,
+    });
+    if (error) {
+      log.error('transferer propriete', { cause: error });
+      return 'sync-echec';
+    }
+    return null;
+  } catch (cause) {
+    log.error('transferer propriete', { cause });
+    return 'sync-echec';
+  }
+}
+
 /** Co-parent connecté : s’ajoute à co_owner_ids et reçoit le payload. */
 export async function rejoindreCoparent(code: string): Promise<Foyer | string> {
   if (!syncDisponible()) return 'sync-indisponible';

@@ -15,6 +15,11 @@ const fr = {
   },
   quest: {
     loading: 'Chargement du foyer…',
+    onboardTitle: 'Ton foyer',
+    onboardHint:
+      'Premier lancement : crée un foyer sur cet appareil, ou rejoins-en un avec un code.',
+    onboardCreate: 'Créer mon foyer',
+    onboardJoin: 'Rejoindre un foyer',
     whoTitle: 'Qui joue ?',
     whoHint:
       'Parents : profil local. Enfants / co-parents : code d’invitation, puis choix du profil.',
@@ -128,6 +133,13 @@ const fr = {
     qrCoparent: 'Code co-parent',
     qrAlt: 'QR {label} {code}',
     qrUnavailable: 'QR indisponible sur cet appareil.',
+    weekTitle: 'Cette semaine',
+    weekRange: '{debut} → {fin}',
+    weekValidations: '{count} validation(s)',
+    transferTitle: 'Transférer la propriété',
+    transferHint:
+      'Le co-parent doit être lié à un compte. Tu restes co-owner après le transfert.',
+    transferDone: 'Propriété transférée.',
     mouvement: {
       credit_validation: 'Validation',
       credit_manuel: 'Crédit manuel',
@@ -156,6 +168,8 @@ const fr = {
       syncIndisponible: 'Sync distante indisponible (Supabase non configuré).',
       syncEchec: 'La synchronisation a échoué.',
       syncRateLimit: 'Trop d’essais de code. Réessaie dans une minute.',
+      pasProprietaire: 'Seul le propriétaire peut transférer le foyer.',
+      ownerSansAuth: 'Ce parent n’a pas encore de compte lié.',
     },
   },
   settings: {
@@ -226,6 +240,11 @@ const en: typeof fr = {
   },
   quest: {
     loading: 'Loading household…',
+    onboardTitle: 'Your household',
+    onboardHint:
+      'First launch: create a household on this device, or join one with a code.',
+    onboardCreate: 'Create my household',
+    onboardJoin: 'Join a household',
     whoTitle: 'Who is playing?',
     whoHint:
       'Parents: local profile. Kids / co-parents: invite code, then pick a profile.',
@@ -338,6 +357,13 @@ const en: typeof fr = {
     qrCoparent: 'Co-parent code',
     qrAlt: 'QR {label} {code}',
     qrUnavailable: 'QR unavailable on this device.',
+    weekTitle: 'This week',
+    weekRange: '{debut} → {fin}',
+    weekValidations: '{count} approval(s)',
+    transferTitle: 'Transfer ownership',
+    transferHint:
+      'The co-parent must be linked to an account. You stay co-owner after the transfer.',
+    transferDone: 'Ownership transferred.',
     mouvement: {
       credit_validation: 'Approval',
       credit_manuel: 'Manual credit',
@@ -366,6 +392,8 @@ const en: typeof fr = {
       syncIndisponible: 'Remote sync unavailable (Supabase not configured).',
       syncEchec: 'Sync failed.',
       syncRateLimit: 'Too many code attempts. Try again in a minute.',
+      pasProprietaire: 'Only the owner can transfer the household.',
+      ownerSansAuth: 'This parent has no linked account yet.',
     },
   },
   settings: {

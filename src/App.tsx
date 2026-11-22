@@ -4,6 +4,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useNavigate,
 } from 'react-router-dom';
 import { Home, Info, Settings, UserRound } from 'lucide-react';
 import { AppShell } from '@mister-guiiug/dev-pwa-config/react/app-shell';
@@ -48,6 +49,7 @@ import { AccountScreen } from './features/account/AccountScreen.tsx';
 export function Shell() {
   const { t } = useI18n();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const pending = useQuest(
     s => s.foyer.declarations.filter(d => d.statut === 'en_attente').length
   );
@@ -119,6 +121,7 @@ export function Shell() {
       hrefProp="to"
       navItems={nav}
       navCurrentPath={pathname}
+      navNavigate={href => void navigate(href)}
       beforeMain={<ConnectionBanner />}
       afterMain={
         /*

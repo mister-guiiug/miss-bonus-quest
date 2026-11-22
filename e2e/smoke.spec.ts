@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { deverrouillerEnfant } from './foyer.ts';
+import { deverrouillerEnfant, passerPorte } from './foyer.ts';
 
 /**
  * Le SMOKE : ce qui doit marcher pour qu'une livraison ait un sens.
@@ -17,11 +17,12 @@ test.describe('@critical le cadre', () => {
   test("l'accueil s'ouvre et porte le nom de l'app", async ({ page }) => {
     await page.goto('/');
     // Le nom de l'app, pas celui de l'écran : c'est le seul `h1` que lit un
-    // moteur. Le sélecteur de profil (Qui joue ?) est le premier vrai contenu
-    // React du foyer — ancré ici pour ne pas passer sur une app morte.
+    // moteur. La porte créer/rejoindre précède « Qui joue ? » (ADR 0017).
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(
       'Miss Bonus Quest'
     );
+    await expect(page.getByText('Ton foyer')).toBeVisible();
+    await passerPorte(page);
     await expect(page.getByText('Qui joue ?')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Parent' })).toBeVisible();
     await expect(page.getByLabel('Code foyer')).toBeVisible();
@@ -56,6 +57,19 @@ test.describe('@critical le cadre', () => {
     const soldeLea = page.getByRole('listitem').filter({ hasText: 'Léa' });
     await expect(soldeLea.getByText('12 min')).toBeVisible();
 
+    // Sursis 8 s : Annuler restaure l’état d’avant la validation (ADR 0017).
+    await page.getByRole('button', { name: 'Annuler' }).click();
+    await expect(soldeLea.getByText('0 min')).toBeVisible();
+    await expect(
+      page.getByRole('listitem').filter({ hasText: 'Ranger sa chambre' })
+    ).toBeVisible();
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Ranger sa chambre' })
+      .getByRole('button', { name: 'Valider' })
+      .click();
+    await expect(soldeLea.getByText('12 min')).toBeVisible();
+
     // Session locale (sessionStorage) : le profil Parent reste après reload.
     await page.reload();
     await expect(page.getByText('Bonjour Parent')).toBeVisible();
@@ -66,7 +80,9 @@ test.describe('@critical le cadre', () => {
 
   test('crédit manuel et consommation sans solde négatif', async ({ page }) => {
     await page.goto('/');
+    await passerPorte(page);
     await page.getByRole('button', { name: 'Parent' }).click();
+    await page.getByRole('button', { name: 'Actions' }).click();
 
     const soldeLea = page.getByRole('listitem').filter({ hasText: 'Léa' });
 
@@ -109,6 +125,15 @@ test.describe('@critical le cadre', () => {
     await expect(page.getByText('Bonjour Léa')).toBeVisible();
     await expect(page.getByText('Faire son lit').first()).toBeVisible();
     await expect(page.getByText('En attente').first()).toBeVisible();
+  });
+
+  test('le deep link ?code= saute la porte et préremplit', async ({ page }) => {
+    await page.goto('/?code=bonus');
+    await expect(page.getByText('Qui joue ?')).toBeVisible();
+    await expect(page.getByLabel('Code foyer')).toHaveValue('BONUS');
+    await expect(
+      page.getByRole('button', { name: 'Créer mon foyer' })
+    ).toHaveCount(0);
   });
 
   test('la navigation atteint les quatre destinations', async ({ page }) => {

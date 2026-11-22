@@ -26,6 +26,10 @@ import type {
 import { streakKey } from './types.ts';
 
 const SESSION_KEY = 'miss-bonus-quest_session';
+/** Sursis d’annulation après validation — ADR 0008 / 0017. */
+export const UNDO_MS = 8_000;
+
+let undoTimer: ReturnType<typeof setTimeout> | null = null;
 
 function nouveauCode(longueur = 6): string {
   return generateCode(longueur, { alphabet: 'antiConfusion' });
@@ -63,6 +67,8 @@ interface QuestState {
   ready: boolean;
   /** Foyer distant en conflit — à trancher dans l’UI. */
   conflict: Foyer | null;
+  /** Snapshot avant la dernière validation — annulable pendant UNDO_MS. */
+  pendingUndo: Foyer | null;
   load: () => void;
   choisirRole: (session: SessionLocale) => void;
   quitterSession: () => void;
@@ -72,6 +78,12 @@ interface QuestState {
   resoudreConflit: (choix: 'local' | 'cloud') => void;
   declarer: (acteId: string, participants: string[]) => string | null;
   valider: (declarationId: string, parentId: string) => string | null;
+  /** Restaure le foyer d’avant la dernière validation (sursis). */
+  annulerDerniereValidation: () => void;
+  /** Solde le sursis sans restaurer — quitter l’écran / nouvelle mutation. */
+  soldUndo: () => void;
+  /** Transfert local de propriétaire vers un parent lié à un compte. */
+  transfererOwner: (nouveauMembreId: string) => string | null;
   refuser: (
     declarationId: string,
     parentId: string,
@@ -139,6 +151,7 @@ export const useQuest = create<QuestState>((set, get) => ({
   session: null,
   ready: false,
   conflict: null,
+  pendingUndo: null,
 
   load() {
     set({
@@ -149,11 +162,13 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   choisirRole(session) {
+    get().soldUndo();
     ecrireSession(session);
     set({ session });
   },
 
   quitterSession() {
+    get().soldUndo();
     ecrireSession(null);
     set({ session: null });
   },
@@ -241,6 +256,9 @@ export const useQuest = create<QuestState>((set, get) => ({
     const acte = foyer.actes.find(a => a.id === decl.acteId);
     if (!acte) return 'acte-inconnu';
 
+    get().soldUndo();
+    const avant: Foyer = structuredClone(foyer);
+
     const now = new Date().toISOString();
     const jour = jourParis(now);
     const { minutes, fromPoints } = minutesPourActe(
@@ -304,6 +322,57 @@ export const useQuest = create<QuestState>((set, get) => ({
           : d
       ),
     };
+    set({ foyer: sauver(next), pendingUndo: avant });
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => {
+      undoTimer = null;
+      set({ pendingUndo: null });
+    }, UNDO_MS);
+    return null;
+  },
+
+  annulerDerniereValidation() {
+    const { pendingUndo } = get();
+    if (!pendingUndo) return;
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      undoTimer = null;
+    }
+    foyerStore.save(pendingUndo);
+    set({ foyer: pendingUndo, pendingUndo: null });
+  },
+
+  soldUndo() {
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      undoTimer = null;
+    }
+    set({ pendingUndo: null });
+  },
+
+  transfererOwner(nouveauMembreId) {
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    const actuel = foyer.membres.find(m => m.id === session.membreId);
+    if (!actuel || actuel.role !== 'parent') return 'parent-inconnu';
+    if (
+      foyer.ownerAuthId &&
+      actuel.authUserId &&
+      foyer.ownerAuthId !== actuel.authUserId
+    ) {
+      return 'pas-proprietaire';
+    }
+    const cible = foyer.membres.find(
+      m => m.id === nouveauMembreId && m.role === 'parent' && m.actif
+    );
+    if (!cible) return 'membre-inconnu';
+    if (!cible.authUserId) return 'owner-sans-auth';
+    if (cible.id === actuel.id) return 'soi-interdit';
+    const next: Foyer = {
+      ...foyer,
+      ownerAuthId: cible.authUserId,
+    };
+    get().soldUndo();
     set({ foyer: sauver(next) });
     return null;
   },
@@ -612,8 +681,17 @@ export const useQuest = create<QuestState>((set, get) => ({
   },
 
   reset() {
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      undoTimer = null;
+    }
     clearFoyer();
     ecrireSession(null);
-    set({ foyer: foyerStore.load(), session: null });
+    set({
+      foyer: foyerStore.load(),
+      session: null,
+      pendingUndo: null,
+      conflict: null,
+    });
   },
 }));

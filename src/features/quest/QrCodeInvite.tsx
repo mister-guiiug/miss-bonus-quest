@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { qrToDataUrl } from '@mister-guiiug/dev-pwa-config/qr';
 import { useI18n } from '../../i18n/index.ts';
+import { urlInvitation } from './deep-link.ts';
 
-/** QR du code foyer — peer `uqr` (ADR 0016). */
+/** QR d’invitation — encode l’URL `?code=` (ADR 0017). */
 export function QrCodeInvite({ code, label }: { code: string; label: string }) {
   const { t } = useI18n();
   const [src, setSrc] = useState<string | null>(null);
+  const payload = urlInvitation(code);
 
   useEffect(() => {
     let cancelled = false;
-    void qrToDataUrl(code, {
+    void qrToDataUrl(payload, {
       width: 160,
       loader: () => import('uqr'),
     })
@@ -22,7 +24,7 @@ export function QrCodeInvite({ code, label }: { code: string; label: string }) {
     return () => {
       cancelled = true;
     };
-  }, [code]);
+  }, [payload]);
 
   if (!src) {
     return <p data-quest="supporting">{t('quest.qrUnavailable')}</p>;

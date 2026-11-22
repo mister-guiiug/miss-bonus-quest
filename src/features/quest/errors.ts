@@ -21,6 +21,8 @@ const ERROR_KEYS: Record<string, string> = {
   'sync-indisponible': 'quest.errors.syncIndisponible',
   'sync-echec': 'quest.errors.syncEchec',
   'sync-rate-limit': 'quest.errors.syncRateLimit',
+  'pas-proprietaire': 'quest.errors.pasProprietaire',
+  'owner-sans-auth': 'quest.errors.ownerSansAuth',
 };
 
 /**
