@@ -22,34 +22,30 @@ import { expect, test } from '@playwright/test';
  * touche pas. Le test vérifie quand même qu'un worker contrôle la page avant
  * de couper : sans lui, il ne prouverait rien.
  *
- * EN MODE LOCAL, comme toute la suite : la donnée relue est celle du magasin
- * versionné. La copie de lecture du mode Supabase (ADR 0013) est prouvée au
- * niveau du port, dans `src/backend/cached-notes.test.ts`.
+ * EN MODE LOCAL (MVP 1) : la donnée relue est celle du magasin versionné du
+ * foyer. Une déclaration visible après recharge hors ligne prouve que React
+ * et le store ont bien démarré — pas seulement le HTML SEO statique.
  */
 test.describe('@critical hors ligne', () => {
-  test('rouverte sans réseau, l’application démarre et relit ses notes', async ({
+  test('rouverte sans réseau, l’application démarre et relit le foyer', async ({
     page,
     context,
     browserName,
   }) => {
-    // Seul Chromium laisse `context.route` intercepter les requêtes d'un
-    // service worker : ailleurs, la coupure serait partielle et le test
-    // pourrait passer pour de mauvaises raisons. La CI de la famille joue
-    // Chromium.
     test.skip(
       browserName !== 'chromium',
       'la coupure des requêtes du service worker n’existe que sous Chromium'
     );
 
-    // 1. La visite en ligne : une note, et le worker installé.
+    // 1. La visite en ligne : une déclaration, et le worker installé.
     await page.goto('/');
-    const texte = `relue hors ligne ${Date.now()}`;
-    await page.getByLabel('Nouvelle note').fill(texte);
-    await page.getByRole('button', { name: 'Ajouter' }).click();
-    await expect(page.getByText(texte)).toBeVisible();
+    await page.getByRole('button', { name: 'Léa' }).click();
+    const acte = page
+      .getByRole('listitem')
+      .filter({ hasText: 'Ranger sa chambre' });
+    await acte.getByRole('button', { name: 'J’ai fait' }).click();
+    await expect(page.getByText('En attente').first()).toBeVisible();
 
-    // `ready` se résout quand le worker est ACTIF, donc après la fin du
-    // précache. Le rechargement le fait contrôler la page.
     await page.evaluate(async () => {
       await navigator.serviceWorker.ready;
     });
@@ -69,10 +65,13 @@ test.describe('@critical hors ligne', () => {
 
     // ANCRÉ SUR CE QUE SEUL REACT REND. Le titre `h1` est aussi dans le HTML
     // servi (`pwaSeoPlugin`) : il resterait visible sur une application morte.
-    // La note, elle, ne sort que du magasin, par le rendu de React.
-    await expect(page.getByText(texte)).toBeVisible();
-    await expect(page.getByLabel('Nouvelle note')).toBeEditable();
-    // Et l'application SAIT qu'elle est hors ligne.
+    // La déclaration et le solde, eux, sortent du magasin foyer.
+    await expect(page.getByText('Bonjour Léa')).toBeVisible();
+    await expect(page.getByText('Ranger sa chambre').first()).toBeVisible();
+    await expect(page.getByText('En attente').first()).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'J’ai fait' }).first()
+    ).toBeEnabled();
     await expect(page.locator('[data-dwc="connection-banner"]')).toBeVisible({
       timeout: 10_000,
     });
