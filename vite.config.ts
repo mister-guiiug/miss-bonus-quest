@@ -53,7 +53,7 @@ export default defineConfig(({ command }) => {
     // un port libre à sa naissance — le générateur récrit ce repli.
     // `strictPort` : un port pris fait échouer le démarrage, au lieu de glisser
     // en silence vers un autre que `.claude/launch.json` ne connaît pas.
-    server: { port: devPortOf(APP_ID, 5223), strictPort: true },
+    server: { port: devPortOf(APP_ID, 5225), strictPort: true },
     // LE MORCEAU SENTRY, À PART : les trois gestes que le socle a promus de
     // dix-huit apps (`vite-pwa.js`, « LE MORCEAU SENTRY »). Un nom fixe, pour
     // qu'une coquille précachée ne demande pas une URL qu'un déploiement a
@@ -83,7 +83,7 @@ export default defineConfig(({ command }) => {
         basePath,
         siteName: 'Miss Bonus Quest',
         logoPath: '/icons/icon-512.png',
-        themeColor: { light: '#f7f8fa', dark: '#0f1115' },
+        themeColor: { light: '#f3faf8', dark: '#0b1413' },
         // Le script qui applique le thème AVANT le premier rendu, avec la clé
         // de `ThemeProvider` (`dwc_theme`). Sans lui, `index.html` le disait
         // posé et il ne l'était pas : un visiteur en sombre voyait un flash

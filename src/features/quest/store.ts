@@ -13,14 +13,37 @@ import {
   importFoyer,
 } from './persistence.ts';
 import type {
+  Acte,
   Declaration,
   Foyer,
+  Membre,
   MouvementSolde,
+  PorteeActe,
   SessionLocale,
+  StreakConfig,
 } from './types.ts';
 import { streakKey } from './types.ts';
 
 const SESSION_KEY = 'miss-bonus-quest_session';
+
+function nouveauCode(longueur = 6): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < longueur; i++) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)]!;
+  }
+  return out;
+}
+
+export type ActeBrouillon = {
+  titre: string;
+  description: string;
+  portee: PorteeActe;
+  points: number;
+  minutesDirectes: number;
+  streak: StreakConfig | null;
+  actif: boolean;
+};
 
 function lireSession(): SessionLocale | null {
   try {
@@ -62,10 +85,24 @@ interface QuestState {
     parentId: string
   ) => string | null;
   solde: (enfantId: string) => number;
+  deverrouillerParCode: (
+    code: string
+  ) => { role: 'enfant' | 'coparent' } | null;
+  majFoyer: (patch: {
+    nom?: string;
+    pointsTaux?: number;
+    minutesTaux?: number;
+  }) => string | null;
+  regenererCode: (quel: 'enfant' | 'coparent') => string | null;
+  ajouterMembre: (role: 'parent' | 'enfant', displayName: string) => string | null;
+  retirerMembre: (membreId: string) => string | null;
+  upsertActe: (acteId: string | null, brouillon: ActeBrouillon) => string | null;
+  setActeActif: (acteId: string, actif: boolean) => string | null;
+  appliquerFoyerDistant: (foyer: Foyer) => void;
   exportJson: () => string | null;
   importJson: (json: string) => number | null;
   reset: () => void;
-}
+};
 
 function sauver(foyer: Foyer) {
   foyerStore.save(foyer);
@@ -341,6 +378,151 @@ export const useQuest = create<QuestState>((set, get) => ({
 
   solde(enfantId) {
     return soldeMinutes(get().foyer, enfantId);
+  },
+
+  deverrouillerParCode(code) {
+    const c = code.trim().toUpperCase();
+    const { foyer } = get();
+    if (c === foyer.codeEnfant.toUpperCase()) return { role: 'enfant' };
+    if (c === foyer.codeCoparent.toUpperCase()) return { role: 'coparent' };
+    return null;
+  },
+
+  majFoyer(patch) {
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    const next: Foyer = {
+      ...foyer,
+      nom: patch.nom?.trim() || foyer.nom,
+      pointsTaux: patch.pointsTaux ?? foyer.pointsTaux,
+      minutesTaux: patch.minutesTaux ?? foyer.minutesTaux,
+    };
+    if (next.pointsTaux <= 0) return 'taux-invalide';
+    if (next.minutesTaux < 0) return 'taux-invalide';
+    sauver(next);
+    set({ foyer: next });
+    return null;
+  },
+
+  regenererCode(quel) {
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    const next: Foyer = {
+      ...foyer,
+      codeEnfant: quel === 'enfant' ? nouveauCode() : foyer.codeEnfant,
+      codeCoparent: quel === 'coparent' ? nouveauCode() : foyer.codeCoparent,
+    };
+    sauver(next);
+    set({ foyer: next });
+    return null;
+  },
+
+  ajouterMembre(role, displayName) {
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    const nom = displayName.trim();
+    if (!nom) return 'nom-requis';
+    const membre: Membre = {
+      id: createId('membre'),
+      role,
+      displayName: nom,
+      actif: true,
+    };
+    const next: Foyer = { ...foyer, membres: [...foyer.membres, membre] };
+    sauver(next);
+    set({ foyer: next });
+    return null;
+  },
+
+  retirerMembre(membreId) {
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    if (membreId === session.membreId) return 'soi-interdit';
+    const cible = foyer.membres.find(m => m.id === membreId);
+    if (!cible) return 'membre-inconnu';
+    const parentsActifs = foyer.membres.filter(
+      m => m.role === 'parent' && m.actif && m.id !== membreId
+    );
+    if (cible.role === 'parent' && parentsActifs.length === 0) {
+      return 'dernier-parent';
+    }
+    const next: Foyer = {
+      ...foyer,
+      membres: foyer.membres.map(m =>
+        m.id === membreId ? { ...m, actif: false } : m
+      ),
+    };
+    sauver(next);
+    set({ foyer: next });
+    return null;
+  },
+
+  upsertActe(acteId, brouillon) {
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    const titre = brouillon.titre.trim();
+    if (!titre) return 'titre-requis';
+    if (brouillon.points < 0 || brouillon.minutesDirectes < 0) {
+      return 'recompense-invalide';
+    }
+
+    let actes: Acte[];
+    if (acteId) {
+      if (!foyer.actes.some(a => a.id === acteId)) return 'acte-inconnu';
+      actes = foyer.actes.map(a =>
+        a.id === acteId
+          ? {
+              ...a,
+              titre,
+              description: brouillon.description.trim(),
+              portee: brouillon.portee,
+              points: brouillon.points,
+              minutesDirectes: brouillon.minutesDirectes,
+              streak: brouillon.streak,
+              actif: brouillon.actif,
+            }
+          : a
+      );
+    } else {
+      const ordre =
+        foyer.actes.reduce((max, a) => Math.max(max, a.ordre), 0) + 1;
+      actes = [
+        ...foyer.actes,
+        {
+          id: createId('acte'),
+          titre,
+          description: brouillon.description.trim(),
+          portee: brouillon.portee,
+          points: brouillon.points,
+          minutesDirectes: brouillon.minutesDirectes,
+          streak: brouillon.streak,
+          actif: brouillon.actif,
+          ordre,
+        },
+      ];
+    }
+    const next: Foyer = { ...foyer, actes };
+    sauver(next);
+    set({ foyer: next });
+    return null;
+  },
+
+  setActeActif(acteId, actif) {
+    const { foyer, session } = get();
+    if (!session || session.role !== 'parent') return 'parent-inconnu';
+    if (!foyer.actes.some(a => a.id === acteId)) return 'acte-inconnu';
+    const next: Foyer = {
+      ...foyer,
+      actes: foyer.actes.map(a => (a.id === acteId ? { ...a, actif } : a)),
+    };
+    sauver(next);
+    set({ foyer: next });
+    return null;
+  },
+
+  appliquerFoyerDistant(foyer) {
+    sauver(foyer);
+    set({ foyer });
   },
 
   exportJson() {
