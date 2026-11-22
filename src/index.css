@@ -35,24 +35,23 @@
  * contraste.
  */
 @theme {
-  --color-primary: #3b6ea5;
-  --color-primary-soft: #dce8f5;
+  --color-primary: #0d7377;
+  --color-primary-soft: #d7efec;
   --radius-card: 0.875rem;
 }
 
 :root {
   color-scheme: light;
 
-  --dwc-bg: #f7f8fa;
+  --dwc-bg: #f3faf8;
   --dwc-surface: #ffffff;
-  --dwc-surface-2: #eef1f5;
-  --dwc-text: #131720;
-  --dwc-text-soft: #5a6472;
-  --dwc-border: #d9dfe7;
-  /* Le pourtour d'un contrôle, 3:1 au moins : 3,77 sur la surface, 3,55 sur
-     le fond, 3,33 sur `surface-2`, le fond des champs. */
-  --dwc-border-strong: #7e848d;
-  --dwc-primary: #3b6ea5;
+  --dwc-surface-2: #e4f1ed;
+  --dwc-text: #10221e;
+  --dwc-text-soft: #4d635c;
+  --dwc-border: #c5d9d3;
+  /* Contour ≥ 3:1 : 4,26 surface / 4,02 fond / 3,67 surface-2. */
+  --dwc-border-strong: #6b7f78;
+  --dwc-primary: #0d7377;
   --dwc-primary-contrast: #ffffff;
   --dwc-danger: #b3261e;
   --dwc-success: #1b6b3a;
@@ -62,16 +61,16 @@
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --dwc-bg: #0f1115;
-  --dwc-surface: #171b22;
-  --dwc-surface-2: #1f242d;
-  --dwc-text: #e8ecf2;
-  --dwc-text-soft: #a3adbb;
-  --dwc-border: #2c333d;
-  /* 4,15 sur la surface, 4,55 sur le fond, 3,75 sur `surface-2`. */
-  --dwc-border-strong: #767d87;
-  --dwc-primary: #7fb0e0;
-  --dwc-primary-contrast: #0f1115;
+  --dwc-bg: #0b1413;
+  --dwc-surface: #13201e;
+  --dwc-surface-2: #1a2a27;
+  --dwc-text: #e6f3ef;
+  --dwc-text-soft: #9bb5ae;
+  --dwc-border: #2a3a36;
+  /* Contour ≥ 3:1 : 4,58 surface / 5,10 fond / 4,08 surface-2. */
+  --dwc-border-strong: #768a83;
+  --dwc-primary: #5ecfc6;
+  --dwc-primary-contrast: #0b1413;
   --dwc-danger: #f2b8b5;
   --dwc-success: #7fd6a0;
   --dwc-warning: #e8c07d;

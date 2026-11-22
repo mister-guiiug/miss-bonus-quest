@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { deverrouillerEnfant } from './foyer.ts';
 
 /**
  * Le SMOKE : ce qui doit marcher pour qu'une livraison ait un sens.
@@ -10,7 +11,7 @@ import { expect, test } from '@playwright/test';
  *
  * Ces tests passent sur un BUILD de production, service worker compris.
  *
- * MVP 1 : foyer local (déclarer / valider / solde), plus l'exemple notes.
+ * MVP 2 : foyer local + porte enfant par code (BONUS), sync optionnelle.
  */
 test.describe('@critical le cadre', () => {
   test("l'accueil s'ouvre et porte le nom de l'app", async ({ page }) => {
@@ -22,17 +23,19 @@ test.describe('@critical le cadre', () => {
       'Miss Bonus Quest'
     );
     await expect(page.getByText('Qui joue ?')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Léa' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Parent' })).toBeVisible();
+    await expect(page.getByLabel('Code foyer')).toBeVisible();
+    // Léa n’apparaît qu’après le code d’invitation.
+    await expect(page.getByRole('button', { name: 'Léa' })).toHaveCount(0);
   });
 
   test('déclarer, valider et voir le solde survivent au rechargement', async ({
     page,
   }) => {
-    // Parcours MVP 1 du plan de test : Léa déclare « Ranger sa chambre »,
-    // Parent valide → 12 min (15 pts → 7 min + 5 min directes).
+    // Léa déclare « Ranger sa chambre », Parent valide → 12 min
+    // (15 pts → 7 min + 5 min directes).
     await page.goto('/');
-    await page.getByRole('button', { name: 'Léa' }).click();
+    await deverrouillerEnfant(page, { enfant: 'Léa' });
     await expect(page.getByText('Bonjour Léa')).toBeVisible();
 
     const acte = page
@@ -71,12 +74,12 @@ test.describe('@critical le cadre', () => {
     // « Faire son lit » : 10 pts → 5 min (taux 10→5), pas de minutes directes.
     await expect(soldeLea.getByText('5 min')).toBeVisible();
 
-    await page.getByLabel('Minutes').fill('3');
+    await page.getByLabel('Minutes', { exact: true }).fill('3');
     await page.getByRole('button', { name: 'Consommer' }).click();
     await expect(soldeLea.getByText('2 min')).toBeVisible();
 
     // Consommer plus que le solde : le magasin borne à zéro.
-    await page.getByLabel('Minutes').fill('99');
+    await page.getByLabel('Minutes', { exact: true }).fill('99');
     await page.getByRole('button', { name: 'Consommer' }).click();
     await expect(soldeLea.getByText('0 min')).toBeVisible();
   });
@@ -90,7 +93,7 @@ test.describe('@critical le cadre', () => {
 
     await context.setOffline(true);
 
-    await page.getByRole('button', { name: 'Léa' }).click();
+    await deverrouillerEnfant(page, { enfant: 'Léa' });
     const acte = page
       .getByRole('listitem')
       .filter({ hasText: 'Faire son lit' });
@@ -150,7 +153,7 @@ test.describe('@critical le cadre', () => {
     page,
   }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Léa' }).click();
+    await deverrouillerEnfant(page, { enfant: 'Léa' });
     const acte = page
       .getByRole('listitem')
       .filter({ hasText: 'Mettre la table' });
@@ -220,10 +223,10 @@ test.describe('@critical le cadre', () => {
     ).toBeVisible();
 
     await page.goto('/');
-    await page.getByRole('button', { name: 'Léa' }).click();
+    await deverrouillerEnfant(page, { code: 'IMPORT', enfant: 'Léa' });
     await expect(page.getByText('Acte importé')).toBeVisible();
     await expect(page.getByText('Mettre la table')).toHaveCount(0);
-    // La session enfant survit au reload : pas de nouveau clic « Léa ».
+    // La session enfant survit au reload : pas de nouveau code ni clic « Léa ».
     await page.reload();
     await expect(page.getByText('Bonjour Léa')).toBeVisible();
     await expect(page.getByText('Acte importé')).toBeVisible();

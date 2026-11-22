@@ -1,7 +1,5 @@
 /**
- * Les dictionnaires de l'application, une entrée par locale et TOUTES DE MÊME
- * FORME : `createI18n` dérive le type des clés du dictionnaire de repli, et le
- * compilateur refuse ensuite `t('cle.qui.nexiste.pas')`.
+ * Dictionnaires de l'application — même forme FR/EN pour `createI18n`.
  */
 const fr = {
   app: {
@@ -19,10 +17,13 @@ const fr = {
     loading: 'Chargement du foyer…',
     whoTitle: 'Qui joue ?',
     whoHint:
-      'MVP 1 : profils locaux sur cet appareil (Supabase arrive ensuite).',
+      'Parents : profil local. Enfants / co-parents : code d’invitation, puis choix du profil.',
     parents: 'Parents',
     enfants: 'Enfants',
-    mvpLocal: 'Code enfant (rappel) : {code}',
+    codeTitle: 'Code d’invitation',
+    codeLabel: 'Code foyer',
+    codeUnlock: 'Déverrouiller',
+    codeInvalid: 'Code inconnu.',
     hello: 'Bonjour {name}',
     switch: 'Changer',
     balance: 'Temps d’écran gagné',
@@ -34,6 +35,7 @@ const fr = {
     declared: 'Déclaration envoyée — en attente de validation.',
     history: 'Historique',
     historyEmpty: 'Aucune déclaration pour l’instant.',
+    filterAll: 'Tous',
     status: {
       en_attente: 'En attente',
       validee: 'Validée',
@@ -42,10 +44,18 @@ const fr = {
     parentBoard: 'Tableau de bord',
     taux: 'Taux : {pts} pts → {min} min',
     codes: 'Codes foyer — enfant : {enfant} · co-parent : {parent}',
+    syncPush: 'Pousser vers le cloud',
+    syncPull: 'Tirer depuis le cloud',
+    syncPushed: 'Foyer synchronisé.',
+    syncPulled: 'Foyer mis à jour depuis le cloud.',
+    syncFailed: 'Synchronisation impossible.',
+    syncLocalOnly:
+      'Mode local : pose VITE_SUPABASE_* pour synchroniser les appareils.',
     inbox: 'À valider',
     inboxEmpty: 'Rien en attente.',
     validate: 'Valider',
     refuse: 'Refuser',
+    refuseReason: 'Motif du refus (optionnel)',
     validated: 'Acte validé, minutes créditées.',
     refused: 'Déclaration refusée.',
     manualCredit: 'Crédit manuel',
@@ -57,6 +67,34 @@ const fr = {
     minutesLabel: 'Minutes',
     consumeAction: 'Consommer',
     consumed: 'Minutes déduites du solde.',
+    foyerSettings: 'Foyer',
+    foyerName: 'Nom du foyer',
+    pointsTaux: 'Points du taux',
+    minutesTaux: 'Minutes du taux',
+    saveFoyer: 'Enregistrer',
+    foyerSaved: 'Foyer mis à jour.',
+    regenChildCode: 'Nouveau code enfant',
+    regenParentCode: 'Nouveau code co-parent',
+    codeRegen: 'Code régénéré.',
+    addChild: 'Prénom du nouvel enfant',
+    addChildAction: 'Ajouter un enfant',
+    childAdded: 'Enfant ajouté.',
+    deactivate: 'Désactiver',
+    activate: 'Réactiver',
+    memberRemoved: 'Membre désactivé.',
+    actsAdmin: 'Catalogue d’actes',
+    inactive: 'inactif',
+    actUpdated: 'Acte mis à jour.',
+    newAct: 'Nouvel acte',
+    actTitle: 'Titre',
+    actDesc: 'Description',
+    actScope: 'Portée',
+    scopePerso: 'Personnel',
+    scopeCollectif: 'Collectif',
+    actPoints: 'Points',
+    actMinutes: 'Minutes directes',
+    createAct: 'Créer l’acte',
+    actCreated: 'Acte créé.',
   },
   settings: {
     title: 'Réglages',
@@ -77,13 +115,13 @@ const fr = {
     resetConfirm: 'Effacer le foyer et repartir du catalogue ?',
     resetBody: 'Cette action est définitive sur cet appareil.',
     backend: 'Source de données',
-    backendLocal: 'Cet appareil seulement (MVP 1)',
+    backendLocal: 'Cet appareil seulement',
   },
   account: {
     title: 'Compte',
     localMode: 'Mode local',
     localModeBody:
-      'Aucun backend n’est configuré : le foyer reste sur cet appareil. La sync parent/enfant via Supabase arrive après la MVP 1.',
+      'Aucun backend n’est configuré : le foyer reste sur cet appareil. Avec Supabase, le compte parent (magic link) active la sync multi-appareils.',
     signOut: 'Se déconnecter',
     admin: 'Administration',
     linkIntro:
@@ -115,9 +153,8 @@ const fr = {
 const en: typeof fr = {
   app: {
     name: 'Miss Bonus Quest',
-    // TODO traduire
     tagline:
-      'Les enfants déclarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d’écran gagnées.',
+      'Kids log personal and household chores; parents approve them and turn points and streaks into earned screen time.',
   },
   nav: {
     home: 'Home',
@@ -128,10 +165,14 @@ const en: typeof fr = {
   quest: {
     loading: 'Loading household…',
     whoTitle: 'Who is playing?',
-    whoHint: 'MVP 1: local profiles on this device (Supabase comes next).',
+    whoHint:
+      'Parents: local profile. Kids / co-parents: invite code, then pick a profile.',
     parents: 'Parents',
     enfants: 'Kids',
-    mvpLocal: 'Kid code (reminder): {code}',
+    codeTitle: 'Invite code',
+    codeLabel: 'Household code',
+    codeUnlock: 'Unlock',
+    codeInvalid: 'Unknown code.',
     hello: 'Hi {name}',
     switch: 'Switch',
     balance: 'Earned screen time',
@@ -143,6 +184,7 @@ const en: typeof fr = {
     declared: 'Submitted — waiting for approval.',
     history: 'History',
     historyEmpty: 'No declarations yet.',
+    filterAll: 'All',
     status: {
       en_attente: 'Pending',
       validee: 'Approved',
@@ -151,10 +193,17 @@ const en: typeof fr = {
     parentBoard: 'Dashboard',
     taux: 'Rate: {pts} pts → {min} min',
     codes: 'Household codes — kid: {enfant} · co-parent: {parent}',
+    syncPush: 'Push to cloud',
+    syncPull: 'Pull from cloud',
+    syncPushed: 'Household synced.',
+    syncPulled: 'Household updated from the cloud.',
+    syncFailed: 'Sync failed.',
+    syncLocalOnly: 'Local mode: set VITE_SUPABASE_* to sync across devices.',
     inbox: 'To approve',
     inboxEmpty: 'Nothing pending.',
     validate: 'Approve',
     refuse: 'Decline',
+    refuseReason: 'Decline reason (optional)',
     validated: 'Approved, minutes credited.',
     refused: 'Declaration declined.',
     manualCredit: 'Manual credit',
@@ -166,6 +215,34 @@ const en: typeof fr = {
     minutesLabel: 'Minutes',
     consumeAction: 'Consume',
     consumed: 'Minutes deducted.',
+    foyerSettings: 'Household',
+    foyerName: 'Household name',
+    pointsTaux: 'Rate points',
+    minutesTaux: 'Rate minutes',
+    saveFoyer: 'Save',
+    foyerSaved: 'Household updated.',
+    regenChildCode: 'New kid code',
+    regenParentCode: 'New co-parent code',
+    codeRegen: 'Code regenerated.',
+    addChild: 'New child first name',
+    addChildAction: 'Add a child',
+    childAdded: 'Child added.',
+    deactivate: 'Deactivate',
+    activate: 'Reactivate',
+    memberRemoved: 'Member deactivated.',
+    actsAdmin: 'Quest catalogue',
+    inactive: 'inactive',
+    actUpdated: 'Quest updated.',
+    newAct: 'New quest',
+    actTitle: 'Title',
+    actDesc: 'Description',
+    actScope: 'Scope',
+    scopePerso: 'Personal',
+    scopeCollectif: 'Shared',
+    actPoints: 'Points',
+    actMinutes: 'Direct minutes',
+    createAct: 'Create quest',
+    actCreated: 'Quest created.',
   },
   settings: {
     title: 'Settings',
@@ -186,13 +263,13 @@ const en: typeof fr = {
     resetConfirm: 'Erase the household and restart from the catalogue?',
     resetBody: 'This cannot be undone on this device.',
     backend: 'Data source',
-    backendLocal: 'This device only (MVP 1)',
+    backendLocal: 'This device only',
   },
   account: {
     title: 'Account',
     localMode: 'Local mode',
     localModeBody:
-      'No backend is configured: the household stays on this device. Parent/child sync via Supabase comes after MVP 1.',
+      'No backend is configured: the household stays on this device. With Supabase, the parent magic-link account enables multi-device sync.',
     signOut: 'Sign out',
     admin: 'Admin',
     linkIntro:
@@ -217,8 +294,7 @@ const en: typeof fr = {
   },
   about: {
     title: 'About',
-    // TODO traduire
-    what: 'Les enfants déclarent des actes perso et collectifs ; les parents valident et convertissent points et streaks en minutes d’écran gagnées.',
+    what: 'Kids log personal and household chores; parents approve them and turn points and streaks into earned screen time.',
   },
 };
 

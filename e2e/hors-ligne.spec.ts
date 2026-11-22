@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { deverrouillerEnfant } from './foyer.ts';
 
 /**
  * LA BUILD SE RECHARGE HORS LIGNE — l'essai que l'audit du 05/11/2026 a fait
@@ -39,7 +40,7 @@ test.describe('@critical hors ligne', () => {
 
     // 1. La visite en ligne : une déclaration, et le worker installé.
     await page.goto('/');
-    await page.getByRole('button', { name: 'Léa' }).click();
+    await deverrouillerEnfant(page, { enfant: 'Léa' });
     const acte = page
       .getByRole('listitem')
       .filter({ hasText: 'Ranger sa chambre' });

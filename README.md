@@ -9,17 +9,21 @@ sur [`@mister-guiiug/dev-pwa-config`](https://github.com/mister-guiiug/dev-pwa-c
 
 Design : [`docs/superpowers/specs/2026-11-22-miss-bonus-quest-design.md`](docs/superpowers/specs/2026-11-22-miss-bonus-quest-design.md).
 
-## MVP 1 (livrée)
+Sync : [ADR 0014](docs/adr/0014-sync-foyer-par-instantane.md).
 
-Foyer **local** sur l’appareil :
+## Ce qui est livré
 
-- profils parent / enfants ;
-- catalogue d’actes (perso + collectif) avec points, minutes et streak ;
-- déclaration enfant → validation / refus parent ;
-- crédit manuel et consommation de minutes ;
-- export / import / reset du foyer.
+Foyer **local** sur l’appareil, plus sync optionnelle par instantané Supabase :
 
-La sync multi-appareils Supabase (auth magic link, codes, RLS) est la suite.
+- profils parent / enfants ; porte enfant / co-parent par code d’invitation ;
+- catalogue d’actes (CRUD parent) avec points, minutes et streak ;
+- déclaration enfant → validation / refus parent (motif optionnel) ;
+- crédit manuel, consommation, réglages du foyer (taux, codes, membres) ;
+- export / import / reset ;
+- sync pousser / tirer quand `VITE_SUPABASE_*` est posé (migration
+  `0006_foyer_snapshots.sql`).
+
+Sans projet Supabase, l’app reste en mode local et le dit à l’écran.
 
 ## Démarrer
 
@@ -30,6 +34,8 @@ npm run dev
 
 L’installation lit le socle sur GitHub Packages : exporter `NODE_AUTH_TOKEN`
 (`read:packages`) avant `npm install`.
+
+Port de développement : **5225** (catalogue famille).
 
 ## Vérifier
 
