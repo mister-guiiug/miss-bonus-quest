@@ -18,7 +18,8 @@ const fr = {
   quest: {
     loading: 'Chargement du foyer…',
     whoTitle: 'Qui joue ?',
-    whoHint: 'MVP 1 : profils locaux sur cet appareil (Supabase arrive ensuite).',
+    whoHint:
+      'MVP 1 : profils locaux sur cet appareil (Supabase arrive ensuite).',
     parents: 'Parents',
     enfants: 'Enfants',
     mvpLocal: 'Code enfant (rappel) : {code}',

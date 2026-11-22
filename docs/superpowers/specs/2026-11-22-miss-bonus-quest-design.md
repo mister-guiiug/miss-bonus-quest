@@ -12,10 +12,10 @@ Les enfants veulent plus de temps d’écran ; les parents veulent que ce temps 
 
 ## 2. Utilisateurs & rôles
 
-| Rôle | Auth | Pouvoirs |
-| ---- | ---- | -------- |
-| Parent | E-mail + magic link (Supabase Auth) | Créer / gérer le foyer, inviter, configurer actes & taux, valider / refuser, créditer manuellement, marquer des minutes « consommées » |
-| Enfant | Profil sans e-mail, joint via **code d’invitation** | Déclarer des actes, voir solde, streaks, historique |
+| Rôle   | Auth                                                | Pouvoirs                                                                                                                               |
+| ------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Parent | E-mail + magic link (Supabase Auth)                 | Créer / gérer le foyer, inviter, configurer actes & taux, valider / refuser, créditer manuellement, marquer des minutes « consommées » |
+| Enfant | Profil sans e-mail, joint via **code d’invitation** | Déclarer des actes, voir solde, streaks, historique                                                                                    |
 
 Plusieurs enfants par foyer. Plusieurs parents possibles (co-parents invités). Un membre n’appartient qu’à un foyer en v1.
 
@@ -62,18 +62,18 @@ Valeurs points / minutes / streaks : réglables ; streaks suggérées sur « fai
 
 ### Enfant
 
-1. **Accueil** — solde minutes, aperçu « prochain acte → X min », streaks, CTA déclaration  
-2. **Catalogue** — actes actifs perso / collectif  
-3. **Déclaration** — confirmation ; si collectif, cocher participants  
-4. **Historique** — filtres en attente / validé / refusé  
+1. **Accueil** — solde minutes, aperçu « prochain acte → X min », streaks, CTA déclaration
+2. **Catalogue** — actes actifs perso / collectif
+3. **Déclaration** — confirmation ; si collectif, cocher participants
+4. **Historique** — filtres en attente / validé / refusé
 
 ### Parent
 
-1. **Tableau de bord** — file à valider (Realtime), soldes par enfant  
-2. **Validation** — valider / refuser (+ motif optionnel)  
-3. **Crédit manuel** — enfant(s) + acte → crédit  
-4. **Catalogue** — activer / éditer / créer / désactiver actes  
-5. **Foyer** — enfants, code invitation, co-parents, taux points→minutes, marquage consommation  
+1. **Tableau de bord** — file à valider (Realtime), soldes par enfant
+2. **Validation** — valider / refuser (+ motif optionnel)
+3. **Crédit manuel** — enfant(s) + acte → crédit
+4. **Catalogue** — activer / éditer / créer / désactiver actes
+5. **Foyer** — enfants, code invitation, co-parents, taux points→minutes, marquage consommation
 
 ### Auth
 
@@ -90,44 +90,44 @@ Valeurs points / minutes / streaks : réglables ; streaks suggérées sur « fai
 
 ## 7. Erreurs & sync
 
-| Situation | Comportement |
-| --------- | ------------ |
-| Hors ligne | UI en lecture cache ; file des déclarations ; sync au retour |
-| Double validation | Idempotent ; toast si déjà décidé |
-| Refus | Statut `refusee`, pas de mouvement ; enfant notifié dans l’historique |
-| Taux modifié | S’applique aux **prochaines** validations seulement |
+| Situation         | Comportement                                                          |
+| ----------------- | --------------------------------------------------------------------- |
+| Hors ligne        | UI en lecture cache ; file des déclarations ; sync au retour          |
+| Double validation | Idempotent ; toast si déjà décidé                                     |
+| Refus             | Statut `refusee`, pas de mouvement ; enfant notifié dans l’historique |
+| Taux modifié      | S’applique aux **prochaines** validations seulement                   |
 
 ## 8. Tests v1
 
-- Unit : conversion points→minutes, calcul streak / palier, solde (crédits − consommations)  
-- Intégration / e2e ciblés : déclaration → validation → solde ; crédit manuel ; RLS parent vs enfant  
+- Unit : conversion points→minutes, calcul streak / palier, solde (crédits − consommations)
+- Intégration / e2e ciblés : déclaration → validation → solde ; crédit manuel ; RLS parent vs enfant
 
 ## 9. Hors scope v1
 
-- Blocage réel de l’appareil / Screen Time OS / MDM  
-- Photo preuve, chat, paiements  
-- Multi-foyers par compte, comptes e-mail enfants  
-- Notifications push (reporté)  
-- Chronomètre de session d’écran dans l’app  
+- Blocage réel de l’appareil / Screen Time OS / MDM
+- Photo preuve, chat, paiements
+- Multi-foyers par compte, comptes e-mail enfants
+- Notifications push (reporté)
+- Chronomètre de session d’écran dans l’app
 
 ## 10. Livraison parc
 
-1. Générer `miss-bonus-quest` via le générateur (`--publish`)  
-2. Brancher Supabase (projet, migrations, vars CI)  
-3. Implémenter selon plan d’implémentation dédié  
-4. `apply-rulesets` + PR d’inscription au catalogue `FAMILY_APPS`  
-5. Ne pas inventer dans le socle : réutiliser auth / realtime / file hors-ligne existants  
+1. Générer `miss-bonus-quest` via le générateur (`--publish`)
+2. Brancher Supabase (projet, migrations, vars CI)
+3. Implémenter selon plan d’implémentation dédié
+4. `apply-rulesets` + PR d’inscription au catalogue `FAMILY_APPS`
+5. Ne pas inventer dans le socle : réutiliser auth / realtime / file hors-ligne existants
 
 ## 11. Décisions tranchées (atelier)
 
-| Sujet | Choix |
-| ----- | ----- |
-| Usage | Appareils séparés synchronisés |
-| Foyer | Multi-enfants + actes collectifs |
-| Récompenses | Mix points→minutes + minutes directes + streaks |
-| Temps d’écran | Carnet d’honneur (pas de blocage) |
-| Auth | Parent magic link + code enfant |
-| Validation | File parent + crédit manuel parent |
-| Catalogue | Prédéfini + CRUD parent |
-| Backend | Supabase |
-| Nom | Miss Bonus Quest (`miss-bonus-quest`) |
+| Sujet         | Choix                                           |
+| ------------- | ----------------------------------------------- |
+| Usage         | Appareils séparés synchronisés                  |
+| Foyer         | Multi-enfants + actes collectifs                |
+| Récompenses   | Mix points→minutes + minutes directes + streaks |
+| Temps d’écran | Carnet d’honneur (pas de blocage)               |
+| Auth          | Parent magic link + code enfant                 |
+| Validation    | File parent + crédit manuel parent              |
+| Catalogue     | Prédéfini + CRUD parent                         |
+| Backend       | Supabase                                        |
+| Nom           | Miss Bonus Quest (`miss-bonus-quest`)           |

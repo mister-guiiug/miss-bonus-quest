@@ -109,8 +109,10 @@ export function lireStreak(
   enfantId: string,
   acteId: string
 ): StreakProgress {
-  return foyer.streaks[streakKey(enfantId, acteId)] ?? {
-    jours: 0,
-    lastDay: null,
-  };
+  return (
+    foyer.streaks[streakKey(enfantId, acteId)] ?? {
+      jours: 0,
+      lastDay: null,
+    }
+  );
 }

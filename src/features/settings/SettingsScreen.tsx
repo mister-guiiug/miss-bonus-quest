@@ -35,8 +35,7 @@ export function SettingsScreen() {
   const [imported, setImported] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
 
-  const hasData =
-    foyer.declarations.length > 0 || foyer.mouvements.length > 0;
+  const hasData = foyer.declarations.length > 0 || foyer.mouvements.length > 0;
 
   const exportFoyer = () => {
     const json = exportJson();

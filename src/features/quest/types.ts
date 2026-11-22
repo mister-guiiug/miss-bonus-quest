@@ -5,10 +5,7 @@ export type PorteeActe = 'perso' | 'collectif';
 export type StatutDeclaration = 'en_attente' | 'validee' | 'refusee';
 
 export type TypeMouvement =
-  | 'credit_validation'
-  | 'credit_manuel'
-  | 'bonus_streak'
-  | 'consommation';
+  'credit_validation' | 'credit_manuel' | 'bonus_streak' | 'consommation';
 
 export interface StreakConfig {
   joursRequis: number;

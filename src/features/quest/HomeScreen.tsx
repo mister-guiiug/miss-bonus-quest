@@ -28,7 +28,10 @@ export function HomeScreen() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-base leading-relaxed" style={{ color: 'var(--dwc-text-soft)' }}>
+      <p
+        className="text-base leading-relaxed"
+        style={{ color: 'var(--dwc-text-soft)' }}
+      >
         {t('app.tagline')}
       </p>
 
@@ -51,10 +54,7 @@ function RoleGate() {
   return (
     <div className="flex flex-col gap-3">
       <Card>
-        <CardHeader
-          title={t('quest.whoTitle')}
-          subtitle={t('quest.whoHint')}
-        />
+        <CardHeader title={t('quest.whoTitle')} subtitle={t('quest.whoHint')} />
         <div className="flex flex-col gap-3">
           <div>
             <p className="mb-2 text-sm font-medium">{t('quest.parents')}</p>
@@ -63,7 +63,9 @@ function RoleGate() {
                 <Button
                   key={m.id}
                   variant="outline"
-                  onClick={() => choisirRole({ role: 'parent', membreId: m.id })}
+                  onClick={() =>
+                    choisirRole({ role: 'parent', membreId: m.id })
+                  }
                 >
                   <Shield aria-hidden className="size-4" />
                   {m.displayName}
@@ -77,7 +79,9 @@ function RoleGate() {
               {enfants.map(m => (
                 <Button
                   key={m.id}
-                  onClick={() => choisirRole({ role: 'enfant', membreId: m.id })}
+                  onClick={() =>
+                    choisirRole({ role: 'enfant', membreId: m.id })
+                  }
                 >
                   <UserRound aria-hidden className="size-4" />
                   {m.displayName}
@@ -117,7 +121,9 @@ function ChildView() {
   const declarer = useQuest(s => s.declarer);
   const membre = foyer.membres.find(m => m.id === session.membreId)!;
   const solde = soldeMinutes(foyer, membre.id);
-  const actes = foyer.actes.filter(a => a.actif).sort((a, b) => a.ordre - b.ordre);
+  const actes = foyer.actes
+    .filter(a => a.actif)
+    .sort((a, b) => a.ordre - b.ordre);
   const enfants = foyer.membres.filter(m => m.role === 'enfant' && m.actif);
   const [collectifPour, setCollectifPour] = useState<Record<string, string[]>>(
     {}
@@ -172,7 +178,8 @@ function ChildView() {
                       className="m-0 text-sm"
                       style={{ color: 'var(--dwc-text-soft)' }}
                     >
-                      {acte.description} · {t('quest.reward', { min: reward.minutes })}
+                      {acte.description} ·{' '}
+                      {t('quest.reward', { min: reward.minutes })}
                       {acte.streak
                         ? ` · ${t('quest.streakProgress', {
                             jours: streak.jours,
@@ -202,8 +209,7 @@ function ChildView() {
                                 : [...cur, e.id];
                               return {
                                 ...prev,
-                                [acte.id]:
-                                  next.length > 0 ? next : [membre.id],
+                                [acte.id]: next.length > 0 ? next : [membre.id],
                               };
                             })
                           }
@@ -229,11 +235,18 @@ function ChildView() {
             {historiques.slice(0, 12).map(d => {
               const acte = foyer.actes.find(a => a.id === d.acteId);
               return (
-                <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
+                <li
+                  key={d.id}
+                  className="flex items-center justify-between gap-2 text-sm"
+                >
                   <span>{acte?.titre ?? d.acteId}</span>
                   <span className="inline-flex items-center gap-1">
-                    {d.statut === 'en_attente' ? <Clock className="size-3.5" /> : null}
-                    {d.statut === 'validee' ? <Check className="size-3.5" /> : null}
+                    {d.statut === 'en_attente' ? (
+                      <Clock className="size-3.5" />
+                    ) : null}
+                    {d.statut === 'validee' ? (
+                      <Check className="size-3.5" />
+                    ) : null}
                     {d.statut === 'refusee' ? <X className="size-3.5" /> : null}
                     {t(`quest.status.${d.statut}`)}
                   </span>
@@ -259,7 +272,9 @@ function ParentView() {
   const membre = foyer.membres.find(m => m.id === session.membreId)!;
   const enfants = foyer.membres.filter(m => m.role === 'enfant' && m.actif);
   const pending = foyer.declarations.filter(d => d.statut === 'en_attente');
-  const actes = foyer.actes.filter(a => a.actif).sort((a, b) => a.ordre - b.ordre);
+  const actes = foyer.actes
+    .filter(a => a.actif)
+    .sort((a, b) => a.ordre - b.ordre);
   const [creditActe, setCreditActe] = useState(actes[0]?.id ?? '');
   const [creditEnfant, setCreditEnfant] = useState(enfants[0]?.id ?? '');
   const [consoEnfant, setConsoEnfant] = useState(enfants[0]?.id ?? '');
@@ -295,7 +310,10 @@ function ParentView() {
             </li>
           ))}
         </ul>
-        <p className="mb-0 mt-3 text-xs" style={{ color: 'var(--dwc-text-soft)' }}>
+        <p
+          className="mb-0 mt-3 text-xs"
+          style={{ color: 'var(--dwc-text-soft)' }}
+        >
           {t('quest.codes', {
             enfant: foyer.codeEnfant,
             parent: foyer.codeCoparent,
