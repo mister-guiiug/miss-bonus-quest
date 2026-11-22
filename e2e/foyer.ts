@@ -1,10 +1,14 @@
 import type { Page } from '@playwright/test';
 
-/** Premier lancement : passe la porte « Créer mon foyer » si elle est affichée. */
+/** Premier lancement : porte + formulaire de création (défauts Léa/Tom). */
 export async function passerPorte(page: Page) {
   const creer = page.getByRole('button', { name: 'Créer mon foyer' });
   if (await creer.isVisible().catch(() => false)) {
     await creer.click();
+  }
+  const valider = page.getByRole('button', { name: 'Créer le foyer' });
+  if (await valider.isVisible().catch(() => false)) {
+    await valider.click();
   }
 }
 

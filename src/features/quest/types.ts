@@ -34,6 +34,14 @@ export interface Membre {
   actif: boolean;
   /** Lien Supabase Auth quand le parent s’est connecté (ADR 0016). */
   authUserId?: string | null;
+  /** Hash SHA-256 du PIN enfant (4 chiffres) — jamais le plaintext. */
+  pinHash?: string | null;
+  /** Emoji d’avatar (sinon initiales). */
+  avatarEmoji?: string | null;
+  /** Couleur CSS d’avatar (sinon muted). */
+  avatarColor?: string | null;
+  /** Frère aîné : peut valider les déclarations des plus jeunes. */
+  peutValider?: boolean;
 }
 
 export interface Declaration {
@@ -75,6 +83,17 @@ export interface Foyer {
   minutesTaux: number;
   codeEnfant: string;
   codeCoparent: string;
+  /** Code lecture seule (grand-parent) — vide = désactivé. */
+  codeLecture?: string;
+  /**
+   * Plafond de minutes gagnées / enfant / jour Paris.
+   * `null` ou `0` = pas de plafond.
+   */
+  plafondMinutesJour?: number | null;
+  /** Objectif collectif de minutes gagnées sur la semaine. */
+  objectifMinutesSemaine?: number | null;
+  /** Accent CSS du foyer (thème léger). */
+  accentColor?: string | null;
   membres: Membre[];
   actes: Acte[];
   declarations: Declaration[];
@@ -91,6 +110,8 @@ export interface SessionLocale {
   membreId: string;
   /** Code saisi pour poll enfant / co-parent (ADR 0016). */
   codeInvite?: string;
+  /** Session ouverte avec le code lecture — pas de mutation. */
+  lectureSeule?: boolean;
 }
 
 export function streakKey(enfantId: string, acteId: string): string {

@@ -24,6 +24,7 @@ test.describe('@critical le cadre', () => {
     await expect(page.getByText('Ton foyer')).toBeVisible();
     await passerPorte(page);
     await expect(page.getByText('Qui joue ?')).toBeVisible();
+    // passerPorte a validé le formulaire de création (défauts Léa / Tom).
     await expect(page.getByRole('button', { name: 'Parent' })).toBeVisible();
     await expect(page.getByLabel('Code foyer')).toBeVisible();
     // Léa n’apparaît qu’après le code d’invitation.
@@ -73,6 +74,12 @@ test.describe('@critical le cadre', () => {
       .getByRole('button', { name: 'Valider' })
       .click();
     await expect(soldeLea.getByText('12 min', { exact: true })).toBeVisible();
+
+    // ADR 0018 : le port n’écrit qu’à l’expiration du sursis — attendre
+    // la figée avant reload, sinon le solde reviendrait à 0.
+    await expect(page.getByText('Validation enregistrée.')).toBeVisible({
+      timeout: 12_000,
+    });
 
     // Session locale (sessionStorage) : le profil Parent reste après reload.
     await page.reload();
@@ -147,6 +154,20 @@ test.describe('@critical le cadre', () => {
     await expect(
       page.getByRole('button', { name: 'Créer mon foyer' })
     ).toHaveCount(0);
+  });
+
+  test('le hook e2e=conflict affiche la bannière de conflit', async ({
+    page,
+  }) => {
+    await page.goto('/?e2e=conflict');
+    await passerPorte(page);
+    await page.getByRole('button', { name: 'Parent' }).click();
+    await expect(page.getByText('Versions en conflit')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Garder cet appareil' })
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Garder cet appareil' }).click();
+    await expect(page.getByText('Versions en conflit')).toHaveCount(0);
   });
 
   test('la navigation atteint les quatre destinations', async ({ page }) => {

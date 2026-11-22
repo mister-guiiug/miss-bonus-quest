@@ -233,7 +233,7 @@ describe('useQuest MVP3', () => {
 });
 
 describe('useQuest MVP5', () => {
-  it('annule une validation pendant le sursis', () => {
+  it('annule une validation pendant le sursis (port non écrit)', () => {
     const state = useQuest.getState();
     const enfant = state.foyer.membres.find(m => m.role === 'enfant')!;
     const parent = state.foyer.membres.find(m => m.role === 'parent')!;
@@ -256,6 +256,19 @@ describe('useQuest MVP5', () => {
     expect(useQuest.getState().pendingUndo).toBeNull();
   });
 
+  it('refuse une validation si le plafond journalier est atteint', () => {
+    const state = useQuest.getState();
+    const enfant = state.foyer.membres.find(m => m.role === 'enfant')!;
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    const acte = state.foyer.actes.find(a => a.titre === 'Faire son lit')!;
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+    expect(state.majFoyer({ plafondMinutesJour: 5 })).toBeNull();
+    expect(state.creditManuel(acte.id, [enfant.id], parent.id)).toBeNull();
+    expect(
+      useQuest.getState().creditManuel(acte.id, [enfant.id], parent.id)
+    ).toBe('plafond-jour');
+  });
+
   it('transfère le propriétaire vers un parent lié', () => {
     const state = useQuest.getState();
     const parent = state.foyer.membres.find(m => m.role === 'parent')!;
@@ -269,5 +282,72 @@ describe('useQuest MVP5', () => {
 
     expect(useQuest.getState().transfererOwner(autre.id)).toBeNull();
     expect(useQuest.getState().foyer.ownerAuthId).toBe('auth-b');
+  });
+});
+
+describe('useQuest MVP7', () => {
+  it('valide plusieurs déclarations en un seul sursis', () => {
+    const state = useQuest.getState();
+    const lea = state.foyer.membres.find(m => m.displayName === 'Léa')!;
+    const tom = state.foyer.membres.find(m => m.displayName === 'Tom')!;
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    const lit = state.foyer.actes.find(a => a.titre === 'Faire son lit')!;
+    const chambre = state.foyer.actes.find(
+      a => a.titre === 'Ranger sa chambre'
+    )!;
+
+    state.choisirRole({ role: 'enfant', membreId: lea.id });
+    expect(state.declarer(lit.id, [])).toBeNull();
+    state.choisirRole({ role: 'enfant', membreId: tom.id });
+    expect(useQuest.getState().declarer(chambre.id, [])).toBeNull();
+
+    const ids = useQuest
+      .getState()
+      .foyer.declarations.filter(d => d.statut === 'en_attente')
+      .map(d => d.id);
+    expect(ids.length).toBe(2);
+
+    useQuest.getState().choisirRole({ role: 'parent', membreId: parent.id });
+    expect(useQuest.getState().validerPlusieurs(ids, parent.id)).toBeNull();
+    expect(
+      useQuest.getState().foyer.declarations.filter(d => d.statut === 'validee')
+        .length
+    ).toBe(2);
+    expect(useQuest.getState().pendingUndo).not.toBeNull();
+  });
+
+  it('laisse un aîné valider la déclaration d’un plus jeune', () => {
+    const state = useQuest.getState();
+    const lea = state.foyer.membres.find(m => m.displayName === 'Léa')!;
+    const tom = state.foyer.membres.find(m => m.displayName === 'Tom')!;
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    const acte = state.foyer.actes.find(a => a.titre === 'Faire son lit')!;
+
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+    expect(state.setPeutValider(lea.id, true)).toBeNull();
+
+    state.choisirRole({ role: 'enfant', membreId: tom.id });
+    expect(useQuest.getState().declarer(acte.id, [])).toBeNull();
+    const decl = useQuest.getState().foyer.declarations[0]!;
+
+    useQuest.getState().choisirRole({ role: 'enfant', membreId: lea.id });
+    expect(useQuest.getState().valider(decl.id, lea.id)).toBeNull();
+    expect(useQuest.getState().foyer.declarations[0]!.statut).toBe('validee');
+    expect(useQuest.getState().foyer.declarations[0]!.validePar).toBe(lea.id);
+  });
+
+  it('refuse qu’un aîné valide sa propre déclaration', () => {
+    const state = useQuest.getState();
+    const lea = state.foyer.membres.find(m => m.displayName === 'Léa')!;
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    const acte = state.foyer.actes.find(a => a.titre === 'Faire son lit')!;
+
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+    expect(state.setPeutValider(lea.id, true)).toBeNull();
+
+    state.choisirRole({ role: 'enfant', membreId: lea.id });
+    expect(useQuest.getState().declarer(acte.id, [])).toBeNull();
+    const decl = useQuest.getState().foyer.declarations[0]!;
+    expect(useQuest.getState().valider(decl.id, lea.id)).toBe('parent-inconnu');
   });
 });

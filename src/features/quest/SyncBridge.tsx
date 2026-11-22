@@ -80,9 +80,10 @@ export function SyncBridge() {
     };
   }, [ready, signedIn, foyer.id, session?.codeInvite, session?.role, toast, t]);
 
-  // Push auto.
+  // Push auto — jamais pendant le sursis d’annulation (ADR 0018).
   useEffect(() => {
     if (!signedIn || !syncDisponible() || !bootstrapped.current) return;
+    if (useQuest.getState().pendingUndo) return;
     if (!foyer.updatedAt || foyer.updatedAt === lastPushedAt.current) return;
     lastPushedAt.current = foyer.updatedAt;
     enfilerPush(foyer);

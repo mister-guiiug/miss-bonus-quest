@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, X } from 'lucide-react';
 import { Button } from '@mister-guiiug/dev-pwa-config/react/button';
@@ -19,13 +19,16 @@ import {
   tirerFoyer,
   transfererPropriete,
 } from './sync.ts';
-import { useQuest, type ActeBrouillon } from './store.ts';
+import { useQuest, type ActeBrouillon, UNDO_MS } from './store.ts';
 import type { Acte, StreakConfig } from './types.ts';
 import { synthetiserSemaine } from './weekly-summary.ts';
 import { AvatarInitiales } from './AvatarInitiales.tsx';
 import { hapticLight, hapticSuccess } from './haptics.ts';
 import { trackQuest } from './analytics-quest.ts';
-import { UNDO_MS } from './store.ts';
+import { partagerInvitation } from './invite-share.ts';
+import { telechargerSynthese, texteSyntheseSemaine } from './week-export.ts';
+import { playQuestSound } from './sound.ts';
+import { setSonActive, sonActive } from './prefs.ts';
 
 const BROUILLON_VIDE: ActeBrouillon = {
   titre: '',
@@ -38,7 +41,16 @@ const BROUILLON_VIDE: ActeBrouillon = {
   actif: true,
 };
 
-type ParentTab = 'inbox' | 'actions' | 'foyer' | 'actes';
+type ParentTab = 'inbox' | 'actions' | 'foyer' | 'actes' | 'history';
+const AVATAR_COLORS = ['#c4ddd8', '#f0d9b5', '#d4c4e8', '#f5c6c6', '#c9d4f0'];
+const AVATAR_EMOJIS = ['🦊', '🐼', '🦁', '🐸', '🦄', '🐯'];
+const ACCENT_COLORS = ['#2a9d8f', '#e76f51', '#264653', '#e9c46a', '#9b5de5'];
+const MOTIFS = [
+  'motifPasFini',
+  'motifPasSoigne',
+  'motifTropVite',
+  'motifARefaire',
+] as const;
 
 function AuthSyncCallout() {
   const { t } = useI18n();
@@ -140,18 +152,23 @@ export function ParentView() {
   const foyer = useQuest(s => s.foyer);
   const session = useQuest(s => s.session)!;
   const valider = useQuest(s => s.valider);
+  const validerPlusieurs = useQuest(s => s.validerPlusieurs);
   const annulerDerniereValidation = useQuest(s => s.annulerDerniereValidation);
   const transfererOwner = useQuest(s => s.transfererOwner);
   const refuser = useQuest(s => s.refuser);
   const creditManuel = useQuest(s => s.creditManuel);
   const consommer = useQuest(s => s.consommer);
   const majFoyer = useQuest(s => s.majFoyer);
+  const setPeutValider = useQuest(s => s.setPeutValider);
   const regenererCode = useQuest(s => s.regenererCode);
   const ajouterMembre = useQuest(s => s.ajouterMembre);
   const retirerMembre = useQuest(s => s.retirerMembre);
   const upsertActe = useQuest(s => s.upsertActe);
   const setActeActif = useQuest(s => s.setActeActif);
   const appliquerFoyerDistant = useQuest(s => s.appliquerFoyerDistant);
+  const definirPin = useQuest(s => s.definirPin);
+  const majAvatar = useQuest(s => s.majAvatar);
+  const lectureSeule = session.lectureSeule === true;
   const membre = foyer.membres.find(m => m.id === session.membreId)!;
   const enfants = foyer.membres.filter(m => m.role === 'enfant' && m.actif);
   const parents = foyer.membres.filter(m => m.role === 'parent' && m.actif);
@@ -164,6 +181,7 @@ export function ParentView() {
   const [consoEnfant, setConsoEnfant] = useState(enfants[0]?.id ?? '');
   const [consoMin, setConsoMin] = useState(10);
   const [motif, setMotif] = useState<Record<string, string>>({});
+  const [selection, setSelection] = useState<string[]>([]);
   const [nomFoyer, setNomFoyer] = useState(foyer.nom);
   const [pts, setPts] = useState(String(foyer.pointsTaux));
   const [mins, setMins] = useState(String(foyer.minutesTaux));
@@ -171,16 +189,109 @@ export function ParentView() {
   const [editId, setEditId] = useState<string | null>(null);
   const [brouillon, setBrouillon] = useState<ActeBrouillon>(BROUILLON_VIDE);
   const [onglet, setOnglet] = useState<ParentTab>('inbox');
+  const [plafond, setPlafond] = useState(String(foyer.plafondMinutesJour ?? 0));
+  const [objectif, setObjectif] = useState(
+    String(foyer.objectifMinutesSemaine ?? 0)
+  );
+  const [pinDraft, setPinDraft] = useState<Record<string, string>>({});
+  const [histFiltre, setHistFiltre] = useState<
+    'tous' | 'validee' | 'refusee' | 'en_attente'
+  >('tous');
+  const [soundOn, setSoundOn] = useState(() => sonActive());
 
   const soldes = enfants.map(e => ({
     id: e.id,
     name: e.displayName,
     minutes: soldeMinutes(foyer, e.id),
+    membre: e,
   }));
   const synthese = useMemo(() => synthetiserSemaine(foyer), [foyer]);
+  const gagneesSemaine = synthese.parEnfant.reduce(
+    (acc, e) => acc + e.minutesGagnees,
+    0
+  );
   const coParents = parents.filter(
     p => p.id !== membre.id && p.authUserId && p.actif
   );
+  const historique = foyer.declarations
+    .filter(d => histFiltre === 'tous' || d.statut === histFiltre)
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 40);
+
+  useEffect(() => {
+    if (foyer.accentColor) {
+      document.documentElement.style.setProperty(
+        '--quest-accent',
+        foyer.accentColor
+      );
+    }
+  }, [foyer.accentColor]);
+
+  useEffect(() => {
+    if (lectureSeule) trackQuest('lecture_seule');
+  }, [lectureSeule]);
+
+  const [titreBase] = useState(() =>
+    typeof document !== 'undefined' ? document.title : ''
+  );
+
+  useEffect(() => {
+    const n = pending.length;
+    if (titreBase) {
+      document.title = n > 0 ? `(${n}) ${titreBase}` : titreBase;
+    }
+    const nav = navigator as Navigator & {
+      setAppBadge?: (n: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (nav.setAppBadge) {
+      void (n > 0 ? nav.setAppBadge(n) : nav.clearAppBadge?.());
+    }
+    // Rappel local uniquement si la permission est déjà accordée (pas de push).
+    if (
+      n > 0 &&
+      typeof Notification !== 'undefined' &&
+      Notification.permission === 'granted'
+    ) {
+      try {
+        new Notification(t('quest.inbox'), {
+          body: String(n),
+          tag: 'quest-inbox',
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [pending.length, t, titreBase]);
+
+  useEffect(() => {
+    const onFigee = () => {
+      toast.show(t('quest.validationFigee'));
+      trackQuest('validation_figee');
+    };
+    window.addEventListener('quest:validation-figee', onFigee);
+    return () => window.removeEventListener('quest:validation-figee', onFigee);
+  }, [toast, t]);
+
+  const apresValidation = (count: number) => {
+    hapticSuccess();
+    playQuestSound('ok');
+    trackQuest(count > 1 ? 'valider_plusieurs' : 'valider', { count });
+    const toastId = toast.show(t('quest.validated'), {
+      duration: 0,
+      action: {
+        onAction: () => {
+          annulerDerniereValidation();
+          hapticLight();
+          trackQuest('annuler_validation');
+        },
+      },
+    });
+    window.setTimeout(() => {
+      if (toastId) toast.dismiss(toastId);
+    }, UNDO_MS);
+  };
 
   const chargerActe = (a: Acte) => {
     setEditId(a.id);
@@ -203,6 +314,7 @@ export function ParentView() {
       label: `${t('quest.tabInbox')}${pending.length ? ` (${pending.length})` : ''}`,
     },
     { id: 'actions', label: t('quest.tabActions') },
+    { id: 'history', label: t('quest.tabHistory') },
     { id: 'foyer', label: t('quest.tabFoyer') },
     { id: 'actes', label: t('quest.tabActs') },
   ];
@@ -229,7 +341,7 @@ export function ParentView() {
               <span
                 style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}
               >
-                <AvatarInitiales name={s.name} size={24} />
+                <AvatarInitiales membre={s.membre} size={24} />
                 {s.name}
               </span>
               <strong>{t('quest.minutes', { count: s.minutes })}</strong>
@@ -249,45 +361,69 @@ export function ParentView() {
               </li>
             ))}
           </ul>
+          {(foyer.objectifMinutesSemaine ?? 0) > 0 ? (
+            <p data-quest="supporting">
+              {t('quest.objectifProgress', {
+                gagnees: gagneesSemaine,
+                cible: foyer.objectifMinutesSemaine ?? 0,
+              })}
+            </p>
+          ) : null}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              telechargerSynthese(
+                texteSyntheseSemaine(synthese, foyer.nom),
+                `semaine-${synthese.debut}.txt`
+              );
+              toast.show(t('quest.weekExported'));
+            }}
+          >
+            {t('quest.weekExport')}
+          </Button>
         </div>
         <AuthSyncCallout />
         {syncDisponible() ? (
-          <div data-quest="row" style={{ marginTop: 'var(--spacing-3)' }}>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                void pousserFoyer(foyer).then(err =>
-                  toast.show(messageErreur(err, t, t('quest.syncPushed')))
-                )
-              }
-            >
-              {t('quest.syncPush')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                void tirerFoyer(foyer.id).then(res => {
-                  if (typeof res === 'string') {
-                    toast.show(messageErreur(res, t, t('quest.syncFailed')));
-                    return;
-                  }
-                  const r = appliquerFoyerDistant(res);
-                  if (r === 'conflit') {
-                    useQuest.getState().setConflict(res);
-                  }
-                  toast.show(
-                    r === 'conflit'
-                      ? t('quest.syncConflict')
-                      : t('quest.syncPulled')
-                  );
-                })
-              }
-            >
-              {t('quest.syncPull')}
-            </Button>
-          </div>
+          <>
+            <div data-quest="row" style={{ marginTop: 'var(--spacing-3)' }}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  void pousserFoyer(foyer).then(err =>
+                    toast.show(messageErreur(err, t, t('quest.syncPushed')))
+                  )
+                }
+              >
+                {t('quest.syncPush')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  void tirerFoyer(foyer.id).then(res => {
+                    if (typeof res === 'string') {
+                      toast.show(messageErreur(res, t, t('quest.syncFailed')));
+                      return;
+                    }
+                    const r = appliquerFoyerDistant(res);
+                    if (r === 'conflit') {
+                      useQuest.getState().setConflict(res);
+                    }
+                    toast.show(
+                      r === 'conflit'
+                        ? t('quest.syncConflict')
+                        : t('quest.syncPulled')
+                    );
+                  })
+                }
+              >
+                {t('quest.syncPull')}
+              </Button>
+            </div>
+            <p data-quest="supporting">{t('quest.pruneCloudHint')}</p>
+          </>
         ) : null}
       </Card>
 
@@ -304,82 +440,44 @@ export function ParentView() {
         ))}
       </div>
 
-      {onglet === 'inbox' ? (
+      {onglet === 'history' ? (
         <Card>
-          <CardHeader title={t('quest.inbox')} />
-          {pending.length === 0 ? (
-            <EmptyState title={t('quest.inboxEmpty')} />
+          <CardHeader title={t('quest.tabHistory')} />
+          <div data-quest="row" style={{ marginBottom: 'var(--spacing-3)' }}>
+            {(
+              [
+                ['tous', t('quest.filterAll')],
+                ['en_attente', t('quest.status.en_attente')],
+                ['validee', t('quest.status.validee')],
+                ['refusee', t('quest.status.refusee')],
+              ] as const
+            ).map(([key, label]) => (
+              <Button
+                key={key}
+                size="sm"
+                variant={histFiltre === key ? 'primary' : 'outline'}
+                onClick={() => setHistFiltre(key)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          {historique.length === 0 ? (
+            <EmptyState title={t('quest.historyEmpty')} />
           ) : (
             <ul data-quest="list">
-              {pending.map(d => {
+              {historique.map(d => {
                 const acte = foyer.actes.find(a => a.id === d.acteId);
-                const qui = d.participants
-                  .map(id => foyer.membres.find(m => m.id === id)?.displayName)
-                  .filter(Boolean)
-                  .join(', ');
                 return (
-                  <li key={d.id} data-quest="acte">
-                    <p
-                      style={{
-                        margin: 0,
-                        fontWeight: 'var(--font-weight-medium)',
-                      }}
-                    >
-                      {acte?.titre}
-                    </p>
-                    <p data-quest="supporting">{qui}</p>
-                    <TextField
-                      label={t('quest.refuseReason')}
-                      value={motif[d.id] ?? ''}
-                      onChange={e =>
-                        setMotif(prev => ({ ...prev, [d.id]: e.target.value }))
-                      }
-                    />
+                  <li key={d.id}>
                     <div
                       data-quest="row"
-                      style={{ marginTop: 'var(--spacing-2)' }}
+                      style={{ justifyContent: 'space-between' }}
                     >
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          const err = valider(d.id, membre.id);
-                          if (err) {
-                            toast.show(
-                              messageErreur(err, t, t('quest.validated'))
-                            );
-                            return;
-                          }
-                          hapticSuccess();
-                          trackQuest('valider');
-                          const toastId = toast.show(t('quest.validated'), {
-                            duration: 0,
-                            action: {
-                              onAction: () => {
-                                annulerDerniereValidation();
-                                hapticLight();
-                                trackQuest('annuler_validation');
-                              },
-                            },
-                          });
-                          window.setTimeout(() => {
-                            if (toastId) toast.dismiss(toastId);
-                          }, UNDO_MS);
-                        }}
-                      >
-                        <Check aria-hidden className="size-4" />
-                        {t('quest.validate')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const err = refuser(d.id, membre.id, motif[d.id]);
-                          toast.show(messageErreur(err, t, t('quest.refused')));
-                        }}
-                      >
-                        <X aria-hidden className="size-4" />
-                        {t('quest.refuse')}
-                      </Button>
+                      <span>{acte?.titre ?? d.acteId}</span>
+                      <span data-quest="supporting">
+                        {t(`quest.status.${d.statut}`)}
+                      </span>
                     </div>
                   </li>
                 );
@@ -389,7 +487,165 @@ export function ParentView() {
         </Card>
       ) : null}
 
-      {onglet === 'actions' ? (
+      {onglet === 'inbox' && !lectureSeule ? (
+        <Card>
+          <CardHeader title={t('quest.inbox')} />
+          {pending.length === 0 ? (
+            <EmptyState title={t('quest.inboxEmpty')} />
+          ) : (
+            <>
+              <div
+                data-quest="row"
+                style={{ marginBottom: 'var(--spacing-2)' }}
+              >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelection(pending.map(d => d.id))}
+                >
+                  {t('quest.selectAllPending')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelection([])}
+                >
+                  {t('quest.clearSelection')}
+                </Button>
+                {selection.length > 0 ? (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const err = validerPlusieurs(selection, membre.id);
+                      if (err) {
+                        if (err === 'plafond-jour')
+                          trackQuest('plafond_atteint');
+                        toast.show(messageErreur(err, t, t('quest.validated')));
+                        return;
+                      }
+                      setSelection([]);
+                      apresValidation(selection.length);
+                    }}
+                  >
+                    {t('quest.validateSelected', { count: selection.length })}
+                  </Button>
+                ) : null}
+              </div>
+              <ul data-quest="list">
+                {pending.map(d => {
+                  const acte = foyer.actes.find(a => a.id === d.acteId);
+                  const qui = d.participants
+                    .map(
+                      id => foyer.membres.find(m => m.id === id)?.displayName
+                    )
+                    .filter(Boolean)
+                    .join(', ');
+                  const checked = selection.includes(d.id);
+                  return (
+                    <li key={d.id} data-quest="acte">
+                      <label
+                        data-quest="row"
+                        style={{
+                          gap: 'var(--spacing-2)',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setSelection(prev =>
+                              checked
+                                ? prev.filter(id => id !== d.id)
+                                : [...prev, d.id]
+                            )
+                          }
+                        />
+                        <span
+                          style={{
+                            margin: 0,
+                            fontWeight: 'var(--font-weight-medium)',
+                          }}
+                        >
+                          {acte?.titre}
+                        </span>
+                      </label>
+                      <p data-quest="supporting">{qui}</p>
+                      <p data-quest="label">{t('quest.refusePresets')}</p>
+                      <div data-quest="row" style={{ flexWrap: 'wrap' }}>
+                        {MOTIFS.map(key => (
+                          <Button
+                            key={key}
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              setMotif(prev => ({
+                                ...prev,
+                                [d.id]: t(`quest.${key}`),
+                              }))
+                            }
+                          >
+                            {t(`quest.${key}`)}
+                          </Button>
+                        ))}
+                      </div>
+                      <TextField
+                        label={t('quest.refuseReason')}
+                        value={motif[d.id] ?? ''}
+                        onChange={e =>
+                          setMotif(prev => ({
+                            ...prev,
+                            [d.id]: e.target.value,
+                          }))
+                        }
+                      />
+                      <div
+                        data-quest="row"
+                        style={{ marginTop: 'var(--spacing-2)' }}
+                      >
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const err = valider(d.id, membre.id);
+                            if (err) {
+                              if (err === 'plafond-jour') {
+                                trackQuest('plafond_atteint');
+                              }
+                              toast.show(
+                                messageErreur(err, t, t('quest.validated'))
+                              );
+                              return;
+                            }
+                            apresValidation(1);
+                          }}
+                        >
+                          <Check aria-hidden className="size-4" />
+                          {t('quest.validate')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const err = refuser(d.id, membre.id, motif[d.id]);
+                            toast.show(
+                              messageErreur(err, t, t('quest.refused'))
+                            );
+                          }}
+                        >
+                          <X aria-hidden className="size-4" />
+                          {t('quest.refuse')}
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </Card>
+      ) : null}
+
+      {onglet === 'actions' && !lectureSeule ? (
         <>
           <Card>
             <CardHeader title={t('quest.manualCredit')} />
@@ -520,66 +776,267 @@ export function ParentView() {
                 label={t('quest.qrCoparent')}
               />
             </div>
-            <TextField
-              label={t('quest.foyerName')}
-              value={nomFoyer}
-              onChange={e => setNomFoyer(e.target.value)}
-            />
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 'var(--spacing-2)',
-              }}
-            >
-              <TextField
-                label={t('quest.pointsTaux')}
-                type="number"
-                value={pts}
-                onChange={e => setPts(e.target.value)}
-              />
-              <TextField
-                label={t('quest.minutesTaux')}
-                type="number"
-                value={mins}
-                onChange={e => setMins(e.target.value)}
-              />
-            </div>
-            <Button
-              onClick={() => {
-                const err = majFoyer({
-                  nom: nomFoyer,
-                  pointsTaux: Number(pts),
-                  minutesTaux: Number(mins),
-                });
-                toast.show(messageErreur(err, t, t('quest.foyerSaved')));
-              }}
-            >
-              {t('quest.saveFoyer')}
-            </Button>
             <div data-quest="row">
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  const err = regenererCode('enfant');
-                  toast.show(messageErreur(err, t, t('quest.codeRegen')));
-                }}
+                onClick={() =>
+                  void partagerInvitation(foyer.codeEnfant).then(r => {
+                    trackQuest('partage_invite', { result: r });
+                    toast.show(
+                      r === 'shared'
+                        ? t('quest.shareDone')
+                        : r === 'copied'
+                          ? t('quest.shareCopied')
+                          : t('quest.shareFailed')
+                    );
+                  })
+                }
               >
-                {t('quest.regenChildCode')}
+                {t('quest.shareInvite')}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
+                onClick={() =>
+                  void partagerInvitation(foyer.codeEnfant).then(r => {
+                    if (r === 'failed') {
+                      toast.show(t('quest.shareFailed'));
+                      return;
+                    }
+                    const err = regenererCode('enfant');
+                    trackQuest('partage_invite', { result: r, regen: true });
+                    toast.show(
+                      err
+                        ? messageErreur(err, t, t('quest.codeRegen'))
+                        : t('quest.shareThenRegenDone')
+                    );
+                  })
+                }
+              >
+                {t('quest.shareThenRegen')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
                 onClick={() => {
-                  const err = regenererCode('coparent');
-                  toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                  const next = !soundOn;
+                  setSonActive(next);
+                  setSoundOn(next);
+                  toast.show(next ? t('quest.soundOn') : t('quest.soundOff'));
                 }}
               >
-                {t('quest.regenParentCode')}
+                {t('quest.soundToggle')}
               </Button>
             </div>
-            {coParents.length > 0 ? (
+            {foyer.codeLecture ? (
+              <p data-quest="supporting">
+                {t('quest.lectureCode')} : {foyer.codeLecture}
+              </p>
+            ) : null}
+            {!lectureSeule ? (
+              <>
+                <TextField
+                  label={t('quest.foyerName')}
+                  value={nomFoyer}
+                  onChange={e => setNomFoyer(e.target.value)}
+                />
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    gap: 'var(--spacing-2)',
+                  }}
+                >
+                  <TextField
+                    label={t('quest.pointsTaux')}
+                    type="number"
+                    value={pts}
+                    onChange={e => setPts(e.target.value)}
+                  />
+                  <TextField
+                    label={t('quest.minutesTaux')}
+                    type="number"
+                    value={mins}
+                    onChange={e => setMins(e.target.value)}
+                  />
+                  <TextField
+                    label={t('quest.plafondLabel')}
+                    type="number"
+                    value={plafond}
+                    onChange={e => setPlafond(e.target.value)}
+                  />
+                </div>
+                <p data-quest="supporting">{t('quest.plafondHint')}</p>
+                <TextField
+                  label={t('quest.objectifLabel')}
+                  type="number"
+                  value={objectif}
+                  onChange={e => setObjectif(e.target.value)}
+                />
+                <p data-quest="supporting">{t('quest.objectifHint')}</p>
+                <p data-quest="label">{t('quest.accentLabel')}</p>
+                <div data-quest="row">
+                  {ACCENT_COLORS.map(c => (
+                    <Button
+                      key={c}
+                      size="sm"
+                      variant={foyer.accentColor === c ? 'primary' : 'outline'}
+                      style={{ background: c, minWidth: 28 }}
+                      aria-label={t('quest.accentLabel')}
+                      onClick={() => {
+                        const err = majFoyer({ accentColor: c });
+                        if (!err) trackQuest('accent_foyer');
+                      }}
+                    >
+                      {' '}
+                    </Button>
+                  ))}
+                </div>
+                <p data-quest="supporting">{t('quest.accentHint')}</p>
+                <Button
+                  onClick={() => {
+                    const err = majFoyer({
+                      nom: nomFoyer,
+                      pointsTaux: Number(pts),
+                      minutesTaux: Number(mins),
+                      plafondMinutesJour: Number(plafond) || null,
+                      objectifMinutesSemaine: Number(objectif) || null,
+                    });
+                    toast.show(messageErreur(err, t, t('quest.foyerSaved')));
+                  }}
+                >
+                  {t('quest.saveFoyer')}
+                </Button>
+                <div data-quest="row">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const err = regenererCode('enfant');
+                      toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                    }}
+                  >
+                    {t('quest.regenChildCode')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const err = regenererCode('coparent');
+                      toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                    }}
+                  >
+                    {t('quest.regenParentCode')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const err = regenererCode('lecture');
+                      toast.show(messageErreur(err, t, t('quest.codeRegen')));
+                    }}
+                  >
+                    {t('quest.regenLectureCode')}
+                  </Button>
+                </div>
+                {enfants.map(e => (
+                  <div key={e.id} data-quest="stack">
+                    <p data-quest="label">
+                      <AvatarInitiales membre={e} size={22} /> {e.displayName}
+                    </p>
+                    <div data-quest="row">
+                      {AVATAR_EMOJIS.map(em => (
+                        <Button
+                          key={em}
+                          size="sm"
+                          variant={e.avatarEmoji === em ? 'primary' : 'outline'}
+                          onClick={() => {
+                            const err = majAvatar(e.id, { avatarEmoji: em });
+                            if (!err) trackQuest('avatar');
+                          }}
+                        >
+                          {em}
+                        </Button>
+                      ))}
+                    </div>
+                    <div data-quest="row">
+                      {AVATAR_COLORS.map(c => (
+                        <Button
+                          key={c}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => majAvatar(e.id, { avatarColor: c })}
+                          style={{ background: c, minWidth: 28 }}
+                          aria-label={t('quest.avatarColor')}
+                        >
+                          {' '}
+                        </Button>
+                      ))}
+                    </div>
+                    <TextField
+                      label={t('quest.pinLabel')}
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pinDraft[e.id] ?? ''}
+                      onChange={ev =>
+                        setPinDraft(prev => ({
+                          ...prev,
+                          [e.id]: ev.target.value
+                            .replace(/\D/g, '')
+                            .slice(0, 4),
+                        }))
+                      }
+                    />
+                    <div data-quest="row">
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          void definirPin(e.id, pinDraft[e.id] ?? '').then(
+                            err => {
+                              if (!err) trackQuest('definir_pin');
+                              toast.show(
+                                messageErreur(err, t, t('quest.pinSet'))
+                              );
+                            }
+                          )
+                        }
+                      >
+                        {t('quest.pinSetAction')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          void definirPin(e.id, null).then(err =>
+                            toast.show(
+                              messageErreur(err, t, t('quest.pinClear'))
+                            )
+                          )
+                        }
+                      >
+                        {t('quest.pinClearAction')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={e.peutValider ? 'primary' : 'outline'}
+                        onClick={() => {
+                          const err = setPeutValider(e.id, !e.peutValider);
+                          if (!err) trackQuest('mode_aine');
+                          toast.show(
+                            messageErreur(err, t, t('quest.foyerSaved'))
+                          );
+                        }}
+                      >
+                        {t('quest.elderToggle')}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : null}
+            {!lectureSeule && coParents.length > 0 ? (
               <div data-quest="stack">
                 <p data-quest="label">{t('quest.transferTitle')}</p>
                 <p data-quest="supporting">{t('quest.transferHint')}</p>
@@ -622,22 +1079,26 @@ export function ParentView() {
                 </div>
               </div>
             ) : null}
-            <TextField
-              label={t('quest.addChild')}
-              value={nouvelEnfant}
-              onChange={e => setNouvelEnfant(e.target.value)}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const err = ajouterMembre('enfant', nouvelEnfant);
-                if (!err) setNouvelEnfant('');
-                toast.show(messageErreur(err, t, t('quest.childAdded')));
-              }}
-            >
-              {t('quest.addChildAction')}
-            </Button>
+            {!lectureSeule ? (
+              <>
+                <TextField
+                  label={t('quest.addChild')}
+                  value={nouvelEnfant}
+                  onChange={e => setNouvelEnfant(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const err = ajouterMembre('enfant', nouvelEnfant);
+                    if (!err) setNouvelEnfant('');
+                    toast.show(messageErreur(err, t, t('quest.childAdded')));
+                  }}
+                >
+                  {t('quest.addChildAction')}
+                </Button>
+              </>
+            ) : null}
             <ul data-quest="list">
               {[...parents, ...enfants].map(m => (
                 <li
@@ -669,7 +1130,7 @@ export function ParentView() {
         </Card>
       ) : null}
 
-      {onglet === 'actes' ? (
+      {onglet === 'actes' && !lectureSeule ? (
         <Card>
           <CardHeader title={t('quest.actsAdmin')} />
           <ul data-quest="list" style={{ marginBottom: 'var(--spacing-3)' }}>

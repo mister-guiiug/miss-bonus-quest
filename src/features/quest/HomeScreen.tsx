@@ -20,22 +20,38 @@ const ParentView = lazy(async () => {
   return { default: m.ParentView };
 });
 
+const IS_TEST = import.meta.env.MODE === 'test';
+
 export function HomeScreen() {
   const { t } = useI18n();
   const load = useQuest(s => s.load);
   const ready = useQuest(s => s.ready);
   const session = useQuest(s => s.session);
 
-  // Précharge tout de suite : un `setOffline` avant le premier clic (e2e)
-  // laisserait sinon le lazy() bloqué hors ligne.
-  useIdlePrefetch(loadChildView, { timeout: 0 });
-  useIdlePrefetch(loadParentView, { timeout: 0 });
+  // Précharge hors Vitest : sinon l’import lazy finit après le teardown
+  // (App.nav.test → EnvironmentTeardownError sur icons.tsx).
+  useIdlePrefetch(loadChildView, { timeout: 0, enabled: !IS_TEST });
+  useIdlePrefetch(loadParentView, { timeout: 0, enabled: !IS_TEST });
 
   useEffect(() => {
     load();
+    if (IS_TEST) return;
     void loadChildView();
     void loadParentView();
   }, [load]);
+
+  // Hook e2e : `/?e2e=conflict` pose un conflit après chargement.
+  useEffect(() => {
+    if (IS_TEST || !ready) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('e2e') !== 'conflict') return;
+    const { foyer, setConflict } = useQuest.getState();
+    setConflict({
+      ...foyer,
+      nom: 'Cloud',
+      updatedAt: new Date(0).toISOString(),
+    });
+  }, [ready]);
 
   if (!ready) {
     return <p data-quest="hint">{t('quest.loading')}</p>;
