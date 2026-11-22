@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Check,
   Clock,
@@ -15,18 +16,31 @@ import { EmptyState } from '@mister-guiiug/dev-pwa-config/react/empty-state';
 import { TextField } from '@mister-guiiug/dev-pwa-config/react/field';
 import { AppFooter } from '@mister-guiiug/dev-pwa-config/react/app-footer';
 import { useToast } from '@mister-guiiug/dev-pwa-config/react/toast';
+import { useAuthContext } from '@mister-guiiug/dev-pwa-config/react/auth-provider';
 import { useI18n } from '../../i18n/index.ts';
 import { REPO_URL } from '../../app/links.ts';
 import { lireStreak, minutesPourActe, soldeMinutes } from './economy.ts';
 import { messageErreur } from './errors.ts';
+import { prochainActe } from './next-act.ts';
 import {
   pousserFoyer,
   rejoindreParCode,
   syncDisponible,
   tirerFoyer,
 } from './sync.ts';
+import { SyncBridge } from './SyncBridge.tsx';
 import { useQuest, type ActeBrouillon } from './store.ts';
-import type { Acte, Membre, StatutDeclaration } from './types.ts';
+import type { Acte, Membre, StatutDeclaration, StreakConfig } from './types.ts';
+
+const BROUILLON_VIDE: ActeBrouillon = {
+  titre: '',
+  description: '',
+  portee: 'perso',
+  points: 10,
+  minutesDirectes: 0,
+  streak: null,
+  actif: true,
+};
 
 export function HomeScreen() {
   const { t } = useI18n();
@@ -39,17 +53,13 @@ export function HomeScreen() {
   }, [load]);
 
   if (!ready) {
-    return <p className="text-sm opacity-70">{t('quest.loading')}</p>;
+    return <p data-quest="hint">{t('quest.loading')}</p>;
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <p
-        className="text-base leading-relaxed"
-        style={{ color: 'var(--dwc-text-soft)' }}
-      >
-        {t('app.tagline')}
-      </p>
+    <div data-quest="screen">
+      <SyncBridge />
+      <p data-quest="hint">{t('app.tagline')}</p>
 
       {!session ? <RoleGate /> : null}
       {session?.role === 'enfant' ? <ChildView /> : null}
@@ -67,11 +77,13 @@ function RoleGate() {
   const choisirRole = useQuest(s => s.choisirRole);
   const deverrouillerParCode = useQuest(s => s.deverrouillerParCode);
   const appliquerFoyerDistant = useQuest(s => s.appliquerFoyerDistant);
+  const creerEnfantApresCode = useQuest(s => s.creerEnfantApresCode);
   const parents = foyer.membres.filter(m => m.role === 'parent' && m.actif);
   const [code, setCode] = useState('');
   const [porte, setPorte] = useState<'fermee' | 'enfant' | 'coparent'>(
     'fermee'
   );
+  const [nouveauPrenom, setNouveauPrenom] = useState('');
 
   const enfants = foyer.membres.filter(m => m.role === 'enfant' && m.actif);
 
@@ -84,25 +96,25 @@ function RoleGate() {
     if (syncDisponible()) {
       const distant = await rejoindreParCode(code);
       if (typeof distant === 'string') {
-        toast.show(messageErreur(distant, t('quest.codeInvalid')));
+        toast.show(messageErreur(distant, t, t('quest.codeInvalid')));
         return;
       }
-      appliquerFoyerDistant(distant);
+      appliquerFoyerDistant(distant, { force: true });
       const role = deverrouillerParCode(code);
       setPorte(role?.role === 'coparent' ? 'coparent' : 'enfant');
       return;
     }
-    toast.show(messageErreur('code-invalide', t('quest.codeInvalid')));
+    toast.show(messageErreur('code-invalide', t, t('quest.codeInvalid')));
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div data-quest="stack">
       <Card>
         <CardHeader title={t('quest.whoTitle')} subtitle={t('quest.whoHint')} />
-        <div className="flex flex-col gap-3">
+        <div data-quest="stack">
           <div>
-            <p className="mb-2 text-sm font-medium">{t('quest.parents')}</p>
-            <div className="flex flex-wrap gap-2">
+            <p data-quest="label">{t('quest.parents')}</p>
+            <div data-quest="row">
               {parents.map(m => (
                 <Button
                   key={m.id}
@@ -118,8 +130,8 @@ function RoleGate() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <p className="m-0 text-sm font-medium">{t('quest.codeTitle')}</p>
+          <div data-quest="stack">
+            <p data-quest="label">{t('quest.codeTitle')}</p>
             <TextField
               label={t('quest.codeLabel')}
               value={code}
@@ -133,9 +145,9 @@ function RoleGate() {
           </div>
 
           {porte === 'enfant' ? (
-            <div>
-              <p className="mb-2 text-sm font-medium">{t('quest.enfants')}</p>
-              <div className="flex flex-wrap gap-2">
+            <div data-quest="stack">
+              <p data-quest="label">{t('quest.enfants')}</p>
+              <div data-quest="row">
                 {enfants.map(m => (
                   <Button
                     key={m.id}
@@ -148,13 +160,40 @@ function RoleGate() {
                   </Button>
                 ))}
               </div>
+              <div data-quest="auth-callout">
+                <p data-quest="label">{t('quest.createChildTitle')}</p>
+                <p data-quest="supporting">{t('quest.createChildHint')}</p>
+                <TextField
+                  label={t('quest.addChild')}
+                  value={nouveauPrenom}
+                  onChange={e => setNouveauPrenom(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const result = creerEnfantApresCode(nouveauPrenom);
+                    if (result === 'nom-requis') {
+                      toast.show(
+                        messageErreur(result, t, t('quest.codeInvalid'))
+                      );
+                      return;
+                    }
+                    choisirRole({ role: 'enfant', membreId: result });
+                    setNouveauPrenom('');
+                    toast.show(t('quest.childAdded'));
+                  }}
+                >
+                  {t('quest.createChildAction')}
+                </Button>
+              </div>
             </div>
           ) : null}
 
           {porte === 'coparent' ? (
             <div>
-              <p className="mb-2 text-sm font-medium">{t('quest.parents')}</p>
-              <div className="flex flex-wrap gap-2">
+              <p data-quest="label">{t('quest.parents')}</p>
+              <div data-quest="row">
                 {parents.map(m => (
                   <Button
                     key={m.id}
@@ -179,8 +218,8 @@ function SessionBar({ membre }: { membre: Membre }) {
   const { t } = useI18n();
   const quitterSession = useQuest(s => s.quitterSession);
   return (
-    <div className="flex items-center justify-between gap-2">
-      <p className="m-0 text-sm font-medium">
+    <div data-quest="session">
+      <p data-quest="label" style={{ margin: 0 }}>
         {t('quest.hello', { name: membre.displayName })}
       </p>
       <Button variant="ghost" size="sm" onClick={quitterSession}>
@@ -193,13 +232,7 @@ function SessionBar({ membre }: { membre: Membre }) {
 function StreakBadge({ jours, requis }: { jours: number; requis: number }) {
   const { t } = useI18n();
   return (
-    <span
-      className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium"
-      style={{
-        background: 'var(--dwc-primary-soft, var(--dwc-surface-2))',
-        color: 'var(--dwc-primary)',
-      }}
-    >
+    <span data-quest="streak">
       <Star aria-hidden className="size-3" />
       {t('quest.streakProgress', { jours, requis })}
     </span>
@@ -214,6 +247,7 @@ function ChildView() {
   const declarer = useQuest(s => s.declarer);
   const membre = foyer.membres.find(m => m.id === session.membreId)!;
   const solde = soldeMinutes(foyer, membre.id);
+  const next = prochainActe(foyer, membre.id);
   const actes = foyer.actes
     .filter(a => a.actif)
     .sort((a, b) => a.ordre - b.ordre);
@@ -235,24 +269,42 @@ function ChildView() {
         ? (collectifPour[acte.id] ?? [membre.id])
         : [membre.id];
     const err = declarer(acte.id, parts);
-    toast.show(messageErreur(err, t('quest.declared')));
+    toast.show(messageErreur(err, t, t('quest.declared')));
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div data-quest="stack">
       <SessionBar membre={membre} />
 
       <Card>
         <CardHeader title={t('quest.balance')} />
-        <p className="m-0 flex items-baseline gap-2 text-3xl font-semibold">
+        <p data-quest="balance">
           <Sparkles aria-hidden className="size-6" />
           {t('quest.minutes', { count: solde })}
         </p>
       </Card>
 
+      {next ? (
+        <div data-quest="next">
+          <p data-quest="label">{t('quest.nextActTitle')}</p>
+          <strong>{next.acte.titre}</strong>
+          <p data-quest="supporting">
+            {t('quest.nextActHint', { min: next.minutes })}
+          </p>
+          {next.streakRequis ? (
+            <StreakBadge jours={next.streakJours} requis={next.streakRequis} />
+          ) : null}
+          <div data-quest="row" style={{ marginTop: 'var(--spacing-2)' }}>
+            <Button size="sm" onClick={() => onDeclare(next.acte)}>
+              {t('quest.declare')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <CardHeader title={t('quest.catalogue')} />
-        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+        <ul data-quest="actes">
           {actes.map(acte => {
             const reward = minutesPourActe(
               acte,
@@ -262,18 +314,21 @@ function ChildView() {
             const streak = lireStreak(foyer, membre.id, acte.id);
             const selected = collectifPour[acte.id] ?? [membre.id];
             return (
-              <li
-                key={acte.id}
-                className="rounded-lg border p-3"
-                style={{ borderColor: 'var(--dwc-border)' }}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="flex flex-col gap-1">
-                    <p className="m-0 font-medium">{acte.titre}</p>
+              <li key={acte.id} data-quest="acte">
+                <div
+                  data-quest="row"
+                  style={{ justifyContent: 'space-between' }}
+                >
+                  <div data-quest="stack" style={{ gap: 'var(--spacing-1)' }}>
                     <p
-                      className="m-0 text-sm"
-                      style={{ color: 'var(--dwc-text-soft)' }}
+                      style={{
+                        margin: 0,
+                        fontWeight: 'var(--font-weight-medium)',
+                      }}
                     >
+                      {acte.titre}
+                    </p>
+                    <p data-quest="supporting">
                       {acte.description} ·{' '}
                       {t('quest.reward', { min: reward.minutes })}
                     </p>
@@ -289,7 +344,10 @@ function ChildView() {
                   </Button>
                 </div>
                 {acte.portee === 'collectif' ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div
+                    data-quest="row"
+                    style={{ marginTop: 'var(--spacing-2)' }}
+                  >
                     {enfants.map(e => {
                       const on = selected.includes(e.id);
                       return (
@@ -300,12 +358,13 @@ function ChildView() {
                           onClick={() =>
                             setCollectifPour(prev => {
                               const cur = prev[acte.id] ?? [membre.id];
-                              const next = on
+                              const nextIds = on
                                 ? cur.filter(id => id !== e.id)
                                 : [...cur, e.id];
                               return {
                                 ...prev,
-                                [acte.id]: next.length > 0 ? next : [membre.id],
+                                [acte.id]:
+                                  nextIds.length > 0 ? nextIds : [membre.id],
                               };
                             })
                           }
@@ -324,7 +383,7 @@ function ChildView() {
 
       <Card>
         <CardHeader title={t('quest.history')} />
-        <div className="mb-3 flex flex-wrap gap-2">
+        <div data-quest="row" style={{ marginBottom: 'var(--spacing-3)' }}>
           {(
             [
               ['tous', t('quest.filterAll')],
@@ -346,14 +405,17 @@ function ChildView() {
         {historiques.length === 0 ? (
           <EmptyState title={t('quest.historyEmpty')} />
         ) : (
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          <ul data-quest="list">
             {historiques.slice(0, 20).map(d => {
               const acte = foyer.actes.find(a => a.id === d.acteId);
               return (
-                <li key={d.id} className="flex flex-col gap-0.5 text-sm">
-                  <div className="flex items-center justify-between gap-2">
+                <li key={d.id}>
+                  <div
+                    data-quest="row"
+                    style={{ justifyContent: 'space-between' }}
+                  >
                     <span>{acte?.titre ?? d.acteId}</span>
-                    <span className="inline-flex items-center gap-1">
+                    <span data-quest="row">
                       {d.statut === 'en_attente' ? (
                         <Clock className="size-3.5" />
                       ) : null}
@@ -367,9 +429,7 @@ function ChildView() {
                     </span>
                   </div>
                   {d.statut === 'refusee' && d.motifRefus ? (
-                    <span style={{ color: 'var(--dwc-text-soft)' }}>
-                      {d.motifRefus}
-                    </span>
+                    <span data-quest="supporting">{d.motifRefus}</span>
                   ) : null}
                 </li>
               );
@@ -377,6 +437,100 @@ function ChildView() {
           </ul>
         )}
       </Card>
+    </div>
+  );
+}
+
+function AuthSyncCallout() {
+  const { t } = useI18n();
+  const { signedIn, ready } = useAuthContext();
+  if (!syncDisponible()) {
+    return <p data-quest="supporting">{t('quest.syncLocalOnly')}</p>;
+  }
+  if (!ready) return null;
+  if (signedIn) {
+    return <p data-quest="supporting">{t('quest.syncLive')}</p>;
+  }
+  return (
+    <div data-quest="auth-callout">
+      <p data-quest="label">{t('quest.authCalloutTitle')}</p>
+      <p data-quest="supporting">{t('quest.authCalloutBody')}</p>
+      <Link to="/compte">
+        <Button size="sm" variant="outline">
+          {t('quest.authCalloutCta')}
+        </Button>
+      </Link>
+    </div>
+  );
+}
+
+function StreakFields({
+  streak,
+  onChange,
+}: {
+  streak: StreakConfig | null;
+  onChange: (s: StreakConfig | null) => void;
+}) {
+  const { t } = useI18n();
+  if (!streak) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() =>
+          onChange({ joursRequis: 7, bonusPoints: 20, bonusMinutes: 5 })
+        }
+      >
+        {t('quest.streakEnable')}
+      </Button>
+    );
+  }
+  return (
+    <div data-quest="stack">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: 'var(--spacing-2)',
+        }}
+      >
+        <TextField
+          label={t('quest.streakDays')}
+          type="number"
+          value={String(streak.joursRequis)}
+          onChange={e =>
+            onChange({
+              ...streak,
+              joursRequis: Math.max(1, Number(e.target.value) || 1),
+            })
+          }
+        />
+        <TextField
+          label={t('quest.streakBonusPts')}
+          type="number"
+          value={String(streak.bonusPoints)}
+          onChange={e =>
+            onChange({
+              ...streak,
+              bonusPoints: Math.max(0, Number(e.target.value) || 0),
+            })
+          }
+        />
+        <TextField
+          label={t('quest.streakBonusMin')}
+          type="number"
+          value={String(streak.bonusMinutes)}
+          onChange={e =>
+            onChange({
+              ...streak,
+              bonusMinutes: Math.max(0, Number(e.target.value) || 0),
+            })
+          }
+        />
+      </div>
+      <Button size="sm" variant="ghost" onClick={() => onChange(null)}>
+        {t('quest.streakDisable')}
+      </Button>
     </div>
   );
 }
@@ -413,28 +567,30 @@ function ParentView() {
   const [pts, setPts] = useState(String(foyer.pointsTaux));
   const [mins, setMins] = useState(String(foyer.minutesTaux));
   const [nouvelEnfant, setNouvelEnfant] = useState('');
-  const [brouillon, setBrouillon] = useState<ActeBrouillon>({
-    titre: '',
-    description: '',
-    portee: 'perso',
-    points: 10,
-    minutesDirectes: 0,
-    streak: null,
-    actif: true,
-  });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [brouillon, setBrouillon] = useState<ActeBrouillon>(BROUILLON_VIDE);
 
-  const soldes = useMemo(
-    () =>
-      enfants.map(e => ({
-        id: e.id,
-        name: e.displayName,
-        minutes: soldeMinutes(foyer, e.id),
-      })),
-    [enfants, foyer]
-  );
+  const soldes = enfants.map(e => ({
+    id: e.id,
+    name: e.displayName,
+    minutes: soldeMinutes(foyer, e.id),
+  }));
+
+  const chargerActe = (a: Acte) => {
+    setEditId(a.id);
+    setBrouillon({
+      titre: a.titre,
+      description: a.description,
+      portee: a.portee,
+      points: a.points,
+      minutesDirectes: a.minutesDirectes,
+      streak: a.streak,
+      actif: a.actif,
+    });
+  };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div data-quest="stack">
       <SessionBar membre={membre} />
 
       <Card>
@@ -445,31 +601,33 @@ function ParentView() {
             min: foyer.minutesTaux,
           })}
         />
-        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        <ul data-quest="list">
           {soldes.map(s => (
-            <li key={s.id} className="flex justify-between text-sm">
+            <li
+              key={s.id}
+              data-quest="row"
+              style={{ justifyContent: 'space-between' }}
+            >
               <span>{s.name}</span>
               <strong>{t('quest.minutes', { count: s.minutes })}</strong>
             </li>
           ))}
         </ul>
-        <p
-          className="mb-0 mt-3 text-xs"
-          style={{ color: 'var(--dwc-text-soft)' }}
-        >
+        <p data-quest="supporting" style={{ marginTop: 'var(--spacing-3)' }}>
           {t('quest.codes', {
             enfant: foyer.codeEnfant,
             parent: foyer.codeCoparent,
           })}
         </p>
+        <AuthSyncCallout />
         {syncDisponible() ? (
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div data-quest="row" style={{ marginTop: 'var(--spacing-3)' }}>
             <Button
               size="sm"
               variant="outline"
               onClick={() =>
                 void pousserFoyer(foyer).then(err =>
-                  toast.show(messageErreur(err, t('quest.syncPushed')))
+                  toast.show(messageErreur(err, t, t('quest.syncPushed')))
                 )
               }
             >
@@ -481,25 +639,22 @@ function ParentView() {
               onClick={() =>
                 void tirerFoyer(foyer.id).then(res => {
                   if (typeof res === 'string') {
-                    toast.show(messageErreur(res, t('quest.syncFailed')));
+                    toast.show(messageErreur(res, t, t('quest.syncFailed')));
                     return;
                   }
-                  appliquerFoyerDistant(res);
-                  toast.show(t('quest.syncPulled'));
+                  const r = appliquerFoyerDistant(res);
+                  toast.show(
+                    r === 'conflit'
+                      ? t('quest.syncConflict')
+                      : t('quest.syncPulled')
+                  );
                 })
               }
             >
               {t('quest.syncPull')}
             </Button>
           </div>
-        ) : (
-          <p
-            className="mb-0 mt-2 text-xs"
-            style={{ color: 'var(--dwc-text-soft)' }}
-          >
-            {t('quest.syncLocalOnly')}
-          </p>
-        )}
+        ) : null}
       </Card>
 
       <Card>
@@ -507,7 +662,7 @@ function ParentView() {
         {pending.length === 0 ? (
           <EmptyState title={t('quest.inboxEmpty')} />
         ) : (
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          <ul data-quest="list">
             {pending.map(d => {
               const acte = foyer.actes.find(a => a.id === d.acteId);
               const qui = d.participants
@@ -515,18 +670,16 @@ function ParentView() {
                 .filter(Boolean)
                 .join(', ');
               return (
-                <li
-                  key={d.id}
-                  className="rounded-lg border p-3"
-                  style={{ borderColor: 'var(--dwc-border)' }}
-                >
-                  <p className="m-0 font-medium">{acte?.titre}</p>
+                <li key={d.id} data-quest="acte">
                   <p
-                    className="m-0 mb-2 text-sm"
-                    style={{ color: 'var(--dwc-text-soft)' }}
+                    style={{
+                      margin: 0,
+                      fontWeight: 'var(--font-weight-medium)',
+                    }}
                   >
-                    {qui}
+                    {acte?.titre}
                   </p>
+                  <p data-quest="supporting">{qui}</p>
                   <TextField
                     label={t('quest.refuseReason')}
                     value={motif[d.id] ?? ''}
@@ -534,12 +687,15 @@ function ParentView() {
                       setMotif(prev => ({ ...prev, [d.id]: e.target.value }))
                     }
                   />
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div
+                    data-quest="row"
+                    style={{ marginTop: 'var(--spacing-2)' }}
+                  >
                     <Button
                       size="sm"
                       onClick={() => {
                         const err = valider(d.id, membre.id);
-                        toast.show(messageErreur(err, t('quest.validated')));
+                        toast.show(messageErreur(err, t, t('quest.validated')));
                       }}
                     >
                       <Check aria-hidden className="size-4" />
@@ -550,7 +706,7 @@ function ParentView() {
                       variant="outline"
                       onClick={() => {
                         const err = refuser(d.id, membre.id, motif[d.id]);
-                        toast.show(messageErreur(err, t('quest.refused')));
+                        toast.show(messageErreur(err, t, t('quest.refused')));
                       }}
                     >
                       <X aria-hidden className="size-4" />
@@ -566,14 +722,21 @@ function ParentView() {
 
       <Card>
         <CardHeader title={t('quest.manualCredit')} />
-        <div className="flex flex-col gap-2">
-          <label className="text-sm">
+        <div data-quest="stack">
+          <label data-quest="label">
             {t('quest.acte')}
             <select
-              className="mt-1 w-full rounded-md border px-2 py-2"
-              style={{ borderColor: 'var(--dwc-border)' }}
               value={creditActe}
               onChange={e => setCreditActe(e.target.value)}
+              style={{
+                display: 'block',
+                width: '100%',
+                marginTop: 'var(--spacing-1)',
+                padding: 'var(--spacing-2)',
+                borderRadius: 'var(--radius-element)',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-background-surface)',
+              }}
             >
               {actes
                 .filter(a => a.actif)
@@ -584,13 +747,20 @@ function ParentView() {
                 ))}
             </select>
           </label>
-          <label className="text-sm">
+          <label data-quest="label">
             {t('quest.enfant')}
             <select
-              className="mt-1 w-full rounded-md border px-2 py-2"
-              style={{ borderColor: 'var(--dwc-border)' }}
               value={creditEnfant}
               onChange={e => setCreditEnfant(e.target.value)}
+              style={{
+                display: 'block',
+                width: '100%',
+                marginTop: 'var(--spacing-1)',
+                padding: 'var(--spacing-2)',
+                borderRadius: 'var(--radius-element)',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-background-surface)',
+              }}
             >
               {enfants.map(e => (
                 <option key={e.id} value={e.id}>
@@ -602,7 +772,7 @@ function ParentView() {
           <Button
             onClick={() => {
               const err = creditManuel(creditActe, [creditEnfant], membre.id);
-              toast.show(messageErreur(err, t('quest.credited')));
+              toast.show(messageErreur(err, t, t('quest.credited')));
             }}
           >
             {t('quest.credit')}
@@ -612,14 +782,21 @@ function ParentView() {
 
       <Card>
         <CardHeader title={t('quest.consume')} />
-        <div className="flex flex-col gap-2">
-          <label className="text-sm">
+        <div data-quest="stack">
+          <label data-quest="label">
             {t('quest.enfant')}
             <select
-              className="mt-1 w-full rounded-md border px-2 py-2"
-              style={{ borderColor: 'var(--dwc-border)' }}
               value={consoEnfant}
               onChange={e => setConsoEnfant(e.target.value)}
+              style={{
+                display: 'block',
+                width: '100%',
+                marginTop: 'var(--spacing-1)',
+                padding: 'var(--spacing-2)',
+                borderRadius: 'var(--radius-element)',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-background-surface)',
+              }}
             >
               {enfants.map(e => (
                 <option key={e.id} value={e.id}>
@@ -628,22 +805,17 @@ function ParentView() {
               ))}
             </select>
           </label>
-          <label className="text-sm">
-            {t('quest.minutesLabel')}
-            <input
-              type="number"
-              min={1}
-              className="mt-1 w-full rounded-md border px-2 py-2"
-              style={{ borderColor: 'var(--dwc-border)' }}
-              value={consoMin}
-              onChange={e => setConsoMin(Number(e.target.value))}
-            />
-          </label>
+          <TextField
+            label={t('quest.minutesLabel')}
+            type="number"
+            value={String(consoMin)}
+            onChange={e => setConsoMin(Number(e.target.value))}
+          />
           <Button
             variant="outline"
             onClick={() => {
               const err = consommer(consoEnfant, consoMin, membre.id);
-              toast.show(messageErreur(err, t('quest.consumed')));
+              toast.show(messageErreur(err, t, t('quest.consumed')));
             }}
           >
             {t('quest.consumeAction')}
@@ -653,13 +825,19 @@ function ParentView() {
 
       <Card>
         <CardHeader title={t('quest.foyerSettings')} />
-        <div className="flex flex-col gap-2">
+        <div data-quest="stack">
           <TextField
             label={t('quest.foyerName')}
             value={nomFoyer}
             onChange={e => setNomFoyer(e.target.value)}
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 'var(--spacing-2)',
+            }}
+          >
             <TextField
               label={t('quest.pointsTaux')}
               type="number"
@@ -680,18 +858,18 @@ function ParentView() {
                 pointsTaux: Number(pts),
                 minutesTaux: Number(mins),
               });
-              toast.show(messageErreur(err, t('quest.foyerSaved')));
+              toast.show(messageErreur(err, t, t('quest.foyerSaved')));
             }}
           >
             {t('quest.saveFoyer')}
           </Button>
-          <div className="flex flex-wrap gap-2">
+          <div data-quest="row">
             <Button
               size="sm"
               variant="outline"
               onClick={() => {
                 const err = regenererCode('enfant');
-                toast.show(messageErreur(err, t('quest.codeRegen')));
+                toast.show(messageErreur(err, t, t('quest.codeRegen')));
               }}
             >
               {t('quest.regenChildCode')}
@@ -701,7 +879,7 @@ function ParentView() {
               variant="outline"
               onClick={() => {
                 const err = regenererCode('coparent');
-                toast.show(messageErreur(err, t('quest.codeRegen')));
+                toast.show(messageErreur(err, t, t('quest.codeRegen')));
               }}
             >
               {t('quest.regenParentCode')}
@@ -718,16 +896,17 @@ function ParentView() {
             onClick={() => {
               const err = ajouterMembre('enfant', nouvelEnfant);
               if (!err) setNouvelEnfant('');
-              toast.show(messageErreur(err, t('quest.childAdded')));
+              toast.show(messageErreur(err, t, t('quest.childAdded')));
             }}
           >
             {t('quest.addChildAction')}
           </Button>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
+          <ul data-quest="list">
             {[...parents, ...enfants].map(m => (
               <li
                 key={m.id}
-                className="flex items-center justify-between gap-2"
+                data-quest="row"
+                style={{ justifyContent: 'space-between' }}
               >
                 <span>
                   {m.displayName} ({m.role})
@@ -738,7 +917,9 @@ function ParentView() {
                     variant="ghost"
                     onClick={() => {
                       const err = retirerMembre(m.id);
-                      toast.show(messageErreur(err, t('quest.memberRemoved')));
+                      toast.show(
+                        messageErreur(err, t, t('quest.memberRemoved'))
+                      );
                     }}
                   >
                     {t('quest.deactivate')}
@@ -752,33 +933,54 @@ function ParentView() {
 
       <Card>
         <CardHeader title={t('quest.actsAdmin')} />
-        <ul className="m-0 mb-3 flex list-none flex-col gap-2 p-0">
+        <ul data-quest="list" style={{ marginBottom: 'var(--spacing-3)' }}>
           {actes.map(a => (
             <li
               key={a.id}
-              className="flex flex-wrap items-center justify-between gap-2 text-sm"
+              data-quest="row"
+              style={{ justifyContent: 'space-between' }}
             >
               <span>
                 {a.titre} {a.actif ? '' : `(${t('quest.inactive')})`}
+                {a.streak ? (
+                  <>
+                    {' '}
+                    <StreakBadge jours={0} requis={a.streak.joursRequis} />
+                  </>
+                ) : null}
               </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const err = setActeActif(a.id, !a.actif);
-                  toast.show(messageErreur(err, t('quest.actUpdated')));
-                }}
-              >
-                {a.actif ? t('quest.deactivate') : t('quest.activate')}
-              </Button>
+              <div data-quest="row">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => chargerActe(a)}
+                >
+                  {t('quest.editAct')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const err = setActeActif(a.id, !a.actif);
+                    toast.show(messageErreur(err, t, t('quest.actUpdated')));
+                  }}
+                >
+                  {a.actif ? t('quest.deactivate') : t('quest.activate')}
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
         <div
-          className="flex flex-col gap-2 border-t pt-3"
-          style={{ borderColor: 'var(--dwc-border)' }}
+          data-quest="stack"
+          style={{
+            borderTop: '1px solid var(--color-border)',
+            paddingTop: 'var(--spacing-3)',
+          }}
         >
-          <p className="m-0 text-sm font-medium">{t('quest.newAct')}</p>
+          <p data-quest="label">
+            {editId ? t('quest.editAct') : t('quest.newAct')}
+          </p>
           <TextField
             label={t('quest.actTitle')}
             value={brouillon.titre}
@@ -791,11 +993,9 @@ function ParentView() {
               setBrouillon(b => ({ ...b, description: e.target.value }))
             }
           />
-          <label className="text-sm">
+          <label data-quest="label">
             {t('quest.actScope')}
             <select
-              className="mt-1 w-full rounded-md border px-2 py-2"
-              style={{ borderColor: 'var(--dwc-border)' }}
               value={brouillon.portee}
               onChange={e =>
                 setBrouillon(b => ({
@@ -803,12 +1003,27 @@ function ParentView() {
                   portee: e.target.value as Acte['portee'],
                 }))
               }
+              style={{
+                display: 'block',
+                width: '100%',
+                marginTop: 'var(--spacing-1)',
+                padding: 'var(--spacing-2)',
+                borderRadius: 'var(--radius-element)',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-background-surface)',
+              }}
             >
               <option value="perso">{t('quest.scopePerso')}</option>
               <option value="collectif">{t('quest.scopeCollectif')}</option>
             </select>
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 'var(--spacing-2)',
+            }}
+          >
             <TextField
               label={t('quest.actPoints')}
               type="number"
@@ -832,25 +1047,42 @@ function ParentView() {
               }
             />
           </div>
-          <Button
-            onClick={() => {
-              const err = upsertActe(null, brouillon);
-              if (!err) {
-                setBrouillon({
-                  titre: '',
-                  description: '',
-                  portee: 'perso',
-                  points: 10,
-                  minutesDirectes: 0,
-                  streak: null,
-                  actif: true,
-                });
-              }
-              toast.show(messageErreur(err, t('quest.actCreated')));
-            }}
-          >
-            {t('quest.createAct')}
-          </Button>
+          <StreakFields
+            streak={brouillon.streak}
+            onChange={streak => setBrouillon(b => ({ ...b, streak }))}
+          />
+          <div data-quest="row">
+            <Button
+              onClick={() => {
+                const err = upsertActe(editId, brouillon);
+                if (!err) {
+                  setBrouillon(BROUILLON_VIDE);
+                  setEditId(null);
+                }
+                toast.show(
+                  messageErreur(
+                    err,
+                    t,
+                    editId ? t('quest.actUpdated') : t('quest.actCreated')
+                  )
+                );
+              }}
+            >
+              {editId ? t('quest.saveFoyer') : t('quest.createAct')}
+            </Button>
+            {editId ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setEditId(null);
+                  setBrouillon(BROUILLON_VIDE);
+                }}
+              >
+                {t('quest.switch')}
+              </Button>
+            ) : null}
+          </div>
         </div>
       </Card>
     </div>

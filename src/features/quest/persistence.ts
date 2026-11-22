@@ -9,7 +9,13 @@ export const foyerStore = createVersionedStore<Foyer>({
   store: PREFIX,
   key: 'foyer',
   version: 1,
-  validate: data => foyerSchema.parse(data),
+  validate: data => {
+    const parsed = foyerSchema.parse(data);
+    return {
+      ...parsed,
+      updatedAt: parsed.updatedAt ?? new Date(0).toISOString(),
+    };
+  },
   seed: () => foyerSeed(),
 });
 

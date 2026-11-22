@@ -33,6 +33,7 @@ personne à la rediscuter.
 | [0012](./0012-posthog-en-europe.md)             | PostHog en Europe remplace GA4 — l'outil, pas la forme           |
 | [0013](./0013-lire-hors-ligne.md)               | Lire hors ligne : le dernier état connu, copié derrière le port  |
 | [0014](./0014-sync-foyer-par-instantane.md)     | Sync foyer par instantané JSON, pas par tables normalisées       |
+| [0015](./0015-astryx-et-sync-vivante.md)        | Grammaire Astryx + sync vivante (auth, file, Realtime, conflits) |
 
 ## Quand une application s'écarte
 

@@ -1,4 +1,17 @@
 import { createLogger } from '@mister-guiiug/dev-pwa-config/logger';
+import { createStore } from '@mister-guiiug/dev-pwa-config/storage';
+import {
+  createSyncQueue,
+  type SyncQueue,
+} from '@mister-guiiug/dev-pwa-config/sync-queue';
+import {
+  createChannel,
+  type Channel,
+} from '@mister-guiiug/dev-pwa-config/realtime';
+import {
+  supabaseRealtimeTransport,
+  type SupabaseChange,
+} from '@mister-guiiug/dev-pwa-config/realtime/supabase';
 import { coverage } from '../../backend/index.ts';
 import { supabase } from '../../backend/supabase.ts';
 import { foyerSchema } from './schema.ts';
@@ -34,10 +47,12 @@ type Client = {
     data: unknown;
     error: { message: string; code?: string } | null;
   }>;
+  channel: (name: string) => unknown;
+  removeChannel: (channel: unknown) => unknown;
 };
 
 /**
- * Sync foyer par instantané JSON (ADR 0014).
+ * Sync foyer par instantané JSON (ADR 0014 / 0015).
  * Sans projet Supabase configuré : indisponible, le magasin local reste la source.
  */
 export function syncDisponible(): boolean {
@@ -53,6 +68,7 @@ export async function pousserFoyer(foyer: Foyer): Promise<string | null> {
     } = await client.auth.getUser();
     if (!user) return 'sync-indisponible';
 
+    const updatedAt = foyer.updatedAt ?? new Date().toISOString();
     const { error } = await client.from('foyer_snapshots').upsert(
       {
         id: foyer.id,
@@ -60,7 +76,7 @@ export async function pousserFoyer(foyer: Foyer): Promise<string | null> {
         code_enfant: foyer.codeEnfant.toUpperCase(),
         code_coparent: foyer.codeCoparent.toUpperCase(),
         payload: foyer,
-        updated_at: new Date().toISOString(),
+        updated_at: updatedAt,
       },
       { onConflict: 'id' }
     );
@@ -88,7 +104,7 @@ export async function tirerFoyer(foyerId: string): Promise<Foyer | string> {
       log.error('tirer foyer', { cause: error });
       return 'sync-echec';
     }
-    return foyerSchema.parse(data.payload);
+    return normaliserFoyer(foyerSchema.parse(data.payload));
   } catch (cause) {
     log.error('tirer foyer', { cause });
     return 'sync-echec';
@@ -106,9 +122,93 @@ export async function rejoindreParCode(code: string): Promise<Foyer | string> {
       log.error('rejoindre par code', { cause: error });
       return 'code-invalide';
     }
-    return foyerSchema.parse(data);
+    return normaliserFoyer(foyerSchema.parse(data));
   } catch (cause) {
     log.error('rejoindre par code', { cause });
     return 'sync-echec';
   }
+}
+
+function normaliserFoyer(parsed: ReturnType<typeof foyerSchema.parse>): Foyer {
+  return {
+    ...parsed,
+    updatedAt: parsed.updatedAt ?? new Date(0).toISOString(),
+  };
+}
+
+/** File hors-ligne : un upsert foyer par id (ADR 0015). */
+let pushQueue: SyncQueue<Foyer> | null = null;
+
+export function foyerPushQueue(): SyncQueue<Foyer> {
+  if (pushQueue) return pushQueue;
+  pushQueue = createSyncQueue<Foyer>({
+    store: createStore('miss-bonus-quest_sync'),
+    keyOf: foyer => foyer.id,
+    process: async foyer => {
+      const err = await pousserFoyer(foyer);
+      if (err) throw new Error(err);
+    },
+    onDead: (entry, error) => {
+      log.error('push foyer lettre morte', {
+        id: entry.id,
+        cause: error,
+      });
+    },
+  });
+  return pushQueue;
+}
+
+/** Enfile un push ; drain si en ligne. */
+export function enfilerPush(foyer: Foyer): void {
+  if (!syncDisponible()) return;
+  const q = foyerPushQueue();
+  q.enqueue(foyer);
+  if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
+    void q.flush().catch(cause => log.error('flush push', { cause }));
+  }
+}
+
+/**
+ * Abonnement Realtime sur `foyer_snapshots` pour un foyer.
+ * Sans session auth, RLS ne laisse rien passer — réservé au parent connecté.
+ */
+export async function ecouterFoyer(
+  foyerId: string,
+  onPayload: (foyer: Foyer) => void
+): Promise<Channel<string> | null> {
+  if (!syncDisponible()) return null;
+  const client = (await supabase.getClient()) as unknown as Client;
+
+  const transport = supabaseRealtimeTransport({
+    client: {
+      channel: name => client.channel(name),
+      removeChannel: ch => client.removeChannel(ch),
+      from: table => client.from(table),
+    },
+    table: 'foyer_snapshots',
+    event: 'UPDATE',
+    filter: `id=eq.${foyerId}`,
+    channelName: `foyer:${foyerId}`,
+  });
+
+  const channel = createChannel<SupabaseChange, string>({
+    connect: transport.connect,
+    cursorOf: transport.cursorOf,
+    catchUp: transport.catchUp,
+    onMessage: change => {
+      const row = change.new;
+      if (!row?.payload) return;
+      try {
+        onPayload(normaliserFoyer(foyerSchema.parse(row.payload)));
+      } catch (cause) {
+        log.error('payload realtime invalide', { cause });
+      }
+    },
+    onStatus: status => {
+      log.info('realtime foyer', { status });
+    },
+  });
+
+  await channel.start();
+  return channel;
 }

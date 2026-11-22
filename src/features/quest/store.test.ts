@@ -126,3 +126,73 @@ describe('useQuest MVP2', () => {
     expect(useQuest.getState().foyer.actes.length).toBe(avant + 1);
   });
 });
+
+describe('useQuest MVP3', () => {
+  it('horodate chaque mutation et détecte un conflit distant', () => {
+    const state = useQuest.getState();
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+
+    const avant = useQuest.getState().foyer.updatedAt;
+    expect(avant).toBeTruthy();
+
+    expect(state.majFoyer({ nom: 'Plus tard' })).toBeNull();
+    const apres = useQuest.getState().foyer.updatedAt;
+    expect(apres >= avant).toBe(true);
+
+    const local = useQuest.getState().foyer;
+    const vieux = {
+      ...local,
+      nom: 'Ancien cloud',
+      updatedAt: new Date(0).toISOString(),
+    };
+    expect(useQuest.getState().appliquerFoyerDistant(vieux)).toBe('conflit');
+    expect(useQuest.getState().foyer.nom).toBe('Plus tard');
+
+    expect(
+      useQuest.getState().appliquerFoyerDistant(vieux, { force: true })
+    ).toBe('ok');
+    expect(useQuest.getState().foyer.nom).toBe('Ancien cloud');
+  });
+
+  it('crée un enfant après code sans session parent', () => {
+    const state = useQuest.getState();
+    expect(state.deverrouillerParCode(state.foyer.codeEnfant)).toEqual({
+      role: 'enfant',
+    });
+    const id = state.creerEnfantApresCode('Léo');
+    expect(id).not.toBe('nom-requis');
+    expect(
+      useQuest
+        .getState()
+        .foyer.membres.some(m => m.id === id && m.displayName === 'Léo')
+    ).toBe(true);
+    expect(state.creerEnfantApresCode('  ')).toBe('nom-requis');
+  });
+
+  it('édite la série d’un acte', () => {
+    const state = useQuest.getState();
+    const parent = state.foyer.membres.find(m => m.role === 'parent')!;
+    const acte = state.foyer.actes[0]!;
+    state.choisirRole({ role: 'parent', membreId: parent.id });
+
+    expect(
+      state.upsertActe(acte.id, {
+        titre: acte.titre,
+        description: acte.description,
+        portee: acte.portee,
+        points: acte.points,
+        minutesDirectes: acte.minutesDirectes,
+        streak: { joursRequis: 5, bonusPoints: 15, bonusMinutes: 3 },
+        actif: true,
+      })
+    ).toBeNull();
+
+    const maj = useQuest.getState().foyer.actes.find(a => a.id === acte.id)!;
+    expect(maj.streak).toEqual({
+      joursRequis: 5,
+      bonusPoints: 15,
+      bonusMinutes: 3,
+    });
+  });
+});

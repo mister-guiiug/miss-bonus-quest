@@ -20,3 +20,9 @@ coverage/
 # Artefacts Playwright — rapports, traces, vidéos, captures d'échec.
 playwright-report/
 test-results/
+
+# Lien CLI Supabase (ref, versions) — local uniquement.
+supabase/.temp/
+
+# Notes et scripts jetables des agents.
+_agent/
