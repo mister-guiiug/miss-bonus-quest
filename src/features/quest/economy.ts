@@ -83,11 +83,9 @@ export function avancerStreak(
     }
   }
 
-  let bonusMinutes = 0;
-  let bonusPoints = 0;
   if (jours >= acte.streak.joursRequis) {
-    bonusPoints = acte.streak.bonusPoints;
-    bonusMinutes =
+    const bonusPoints = acte.streak.bonusPoints;
+    const bonusMinutes =
       acte.streak.bonusMinutes +
       minutesFromPoints(bonusPoints, pointsTaux, minutesTaux);
     return {
