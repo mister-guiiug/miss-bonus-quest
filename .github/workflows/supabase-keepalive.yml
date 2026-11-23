@@ -15,8 +15,9 @@
 # famille sans modifier le workflow appelé.
 #
 # Prérequis, et le premier est celui qu'on oublie : une table `keep_alive` doit
-# exister, sinon le ping répond 404 en silence (cf. `templates/supabase/keep-alive.sql`
-# du socle).
+# exister, sinon le ping répond 404 en silence. Elle naît par la migration
+# `0011_keep_alive.sql` : le script à appliquer à la main qu'on avait à la
+# place ne l'a jamais été, et le premier ping (23/11/2026) a rendu 404.
 name: Supabase keep-alive
 
 on:
